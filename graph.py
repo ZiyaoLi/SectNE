@@ -60,12 +60,11 @@ class Graph:
             s = f.readline()
 
     def add_vertex(self, vid):
-        vmax = self.size
-        if vmax > vid:
+        if self.size > vid:
             if self.vertices[vid] is None:
                 self.vertices[vid] = Proximity()
         else:
-            for t in range(vid + 1 - vmax):
+            for t in range(vid + 1 - self.size):
                 self.vertices.append(None)
             self.vertices[vid] = Proximity()
             self.size = vid + 1

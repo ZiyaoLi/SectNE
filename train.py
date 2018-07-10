@@ -98,6 +98,6 @@ class Optimizer:
         return embeddings
 
 if __name__ == '__main__':
-    net = Graph('graph.txt')
+    net = Graph('graph.txt', typ=1)
     k_set = sample(net, 50, 'deg^2')
-    model = Optimizer(Graph, [k_set])
+    model = Optimizer(net, [k_set])
