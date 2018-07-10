@@ -9,7 +9,11 @@ from graph import Graph
 
 
 def hkey(weight):
-    return random.random() ** (1.0 / weight)
+    assert weight >= 0
+    if weight == 0:
+        return 0
+    else:
+        return random.random() ** (1.0 / weight)
 
 
 def reservoir(probs, k):
