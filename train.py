@@ -4,9 +4,11 @@
 # lam -> lambda
 # min{ (M0i-M00 B)^2+(Mi0-A M00)^2+(Mii-A' M00 B)^2 +
 #      lam*{(M0ib Miib'-M0ib M0ib' A)^2+( Mib0' Mibi-Mibo' Mib0 B)^2} + eta*(A^2+B^2) }
-# 继续优化,仅计算对角线即可,按列向量计算减小复杂度
+
+# please notice that @ operator is for matrix multiplication
 
 import numpy as np
+from numpy.linalg import norm
 from graph import Graph
 from sample import sample
 
@@ -15,16 +17,17 @@ LAMBDA = 0.5
 ETA = 0.3
 MAX_ITER = 20
 EPSILON = 1e-8
+DIMENSION = 100
+K_SIZE = 200
 
 
-def CGD(x0, A, grad, max_iter):
+def conjugate_gradient(x, A, grad, max_iter):
 
     r = -grad
     if r.all() == 0:  ##
-        return x0  ##
+        return x  ##
     p = r
     epsilon = 1e-6
-    x = x0
     for i in range(max_iter):
         r2 = np.dot(r.T, r)
         Ap = np.dot(A, p)
@@ -41,71 +44,85 @@ def CGD(x0, A, grad, max_iter):
 
 class Optimizer:
     def __init__(self, graph, groups,
+                 dim=DIMENSION,
                  lam=LAMBDA, eta=ETA,
                  max_iter=MAX_ITER, criterion=EPSILON):
         self.graph = graph
-        self.sep = groups
-        self.m0 = graph.calc_matrix(groups[0], groups[0])
-        u, d, v = np.linalg.svd(self.m0)
-        self.wt = np.dot(u, np.diag(np.sqrt(d)))
+        self.groups = groups
+        self.nGroups = len(groups)
         self.lam = lam
         self.eta = eta
         self.max_iter = max_iter
         self.criterion = criterion
 
-    def get_ib(self, index):
+        # k decomposition: SVD
+        m0 = graph.calc_matrix(groups[0], groups[0])
+        u, d, v = np.linalg.svd(m0)
+        self.phi = (u[:, :dim] @ np.diag(np.sqrt(d[:dim]))).T
+        self.psi = (v[:, :dim] @ np.diag(np.sqrt(d[:dim]))).T
+        self.m0_tilde = self.phi.T @ self.psi
+
+    def _get_rest_idx(self, group_idx):
         ib = []
-        for i in range(1, len(self.sep)):
-            if i == index:
+        for i in range(1, len(self.groups)):
+            if i == group_idx:
                 continue
-            ib += self.sep[i]
+            ib += self.groups[i]
         return ib
 
     def train(self, group_idx, embeddings):
-        M0i = self.graph.calc_matrix(self.sep[0], self.sep[group_idx])
-        Mii = self.graph.calc_matrix(self.sep[group_idx], self.sep[group_idx])
-        ib = self.get_ib(group_idx)
-        M0ib = self.graph.calc_matrix(self.sep[0],ib)
-        Miib = self.graph.calc_matrix(self.sep[group_idx], ib)
-        #init
-        k = len(self.sep[0])
-        mi = len(self.sep[group_idx])
-        A = np.ones((k,mi)) ##
-        B = -np.ones((k,mi)) ##
-        for ii in range(self.max_iter) :
+
+        assert group_idx < self.nGroups
+        if group_idx == 0:
+            return self.phi
+        m0_1 = self.graph.calc_matrix(self.groups[0], self.groups[group_idx])
+        m1_1 = self.graph.calc_matrix(self.groups[group_idx], self.groups[group_idx])
+        rest_indices = self._get_rest_idx(group_idx)
+        m0_1b = self.graph.calc_matrix(self.groups[0], rest_indices)
+        m1_1b = self.graph.calc_matrix(self.groups[group_idx], rest_indices)
+
+        # init
+        n_k = len(self.groups[0])
+        n_m1 = len(self.groups[group_idx])
+        # random initial values
+        A = np.random.random((n_k, n_m1))
+        B = np.random.random((n_k, n_m1))
+        ite = 0
+        while ite <= self.max_iter:
+            ite += 1
             # fix B update A
-            MB = np.dot(self.m0, B)
-            M2 = np.dot(M0ib,M0ib.T)
+            MB = self.m0_tilde @ B
+            M2 = m0_1b @ m0_1b.T
             # Hessian
-            HA = np.dot(self.m0, self.m0) + np.dot(MB, MB.T) + self.lam * np.dot(M2, M2) + self.eta
-            bA = np.dot(self.m0, M0i) + np.dot(MB, Mii) + self.lam * np.dot(M2, np.dot(M0ib, Miib.T))
-            GradA = np.dot(HA,A)-bA
-            A = CGD(A, HA, GradA, self.max_iter)
+            HA = self.m0_tilde @ self.m0_tilde + MB @ MB.T + self.lam * (M2 @ M2) + self.eta
+            bA = self.m0_tilde @ m0_1 + MB @ m1_1 + self.lam * (M2 @ (m0_1b @ m1_1b.T))
+            GradA = (HA @ A)-bA
+            A = conjugate_gradient(A, HA, GradA, self.max_iter)
 
             # fix A update B
-            MA = np.dot(self.m0, A)
-            MT = np.dot(M0ib,M0ib.T)
+            MA = self.m0_tilde @ A
+            MT = m0_1b @ m0_1b.T
             # Hessian
-            HB = np.dot(self.m0, self.m0) + np.dot(MA, MA.T) + self.lam * np.dot(MT, MT) + self.eta
-            bB = np.dot(self.m0, M0i) + np.dot(MA, Mii) + self.lam * np.dot(MT, np.dot(M0ib, Miib.T))
-            GradB = np.dot(HB,B)-bB
-            B = CGD(B, HB, GradB, self.max_iter)
+            HB = self.m0_tilde @ self.m0_tilde + MA @ MA.T + self.lam * (MT @ MT) + self.eta
+            bB = self.m0_tilde @ m0_1 + MA @ m1_1 + self.lam * (MT @ (m0_1b @ m1_1b.T))
+            GradB = (HB @ B)-bB
+            B = conjugate_gradient(B, HB, GradB, self.max_iter)
 
-        w = np.dot(self.wt.T,A) 
-        for i,v in enumerate(self.sep[group_idx]) :
-            embeddings[v]=(w.T)[i].tolist()
+        w = self.phi @ A
+        for i, v in enumerate(self.groups[group_idx]):
+            embeddings[v] = w.T[i].tolist()
         
     def get_embeddings (self) :
         embeddings = {}
-        for i, v in enumerate(self.sep[0]) :
+        for i, v in enumerate(self.groups[0]) :
             embeddings[v] = self.wt[i].tolist()
-        print("{} Blocks in All".format(len(self.sep)))
-        for index in range(1,len(self.sep)) :
+        print("{} Blocks in All".format(len(self.groups)))
+        for index in range(1, len(self.groups)) :
             self.train(index, embeddings)
             print("Block {} Finished!".format(index))
         return embeddings
 
 if __name__ == '__main__':
-    net = Graph('graph.txt', typ=1)
-    k_set = sample(net, 50, 'deg^2')
+    net = Graph('wiki.txt', typ=1)
+    k_set = sample(net, K_SIZE, 'deg^2')
     model = Optimizer(net, [k_set])
