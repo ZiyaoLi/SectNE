@@ -16,29 +16,27 @@ from sample import sample
 LAMBDA = 0.5
 ETA = 0.3
 MAX_ITER = 20
+CG_MAX_ITER = 20
 EPSILON = 1e-8
 DIMENSION = 100
 K_SIZE = 200
 
 
-def conjugate_gradient(x, A, grad, max_iter):
-
+def conjugate_gradient(x, A, grad, max_iter=CG_MAX_ITER, eps=EPSILON):
     r = -grad
     if r.all() == 0:  ##
         return x  ##
     p = r
-    epsilon = 1e-6
     for i in range(max_iter):
-        r2 = np.dot(r.T, r)
-        Ap = np.dot(A, p)
-        alpha = r2/np.dot(p.T, Ap)
-        x = x + np.dot(p, np.diag(np.diag(alpha)))
-        r = r - np.dot(Ap, np.diag(np.diag(alpha)))
-        # print(np.linalg.norm(r))
-        if np.linalg.norm(r) <= epsilon:
+        r2 = r.T @ r
+        Ap = A @ p
+        alpha = r2 / (p.T @ Ap)
+        x = x + p @ np.diag(np.diag(alpha))
+        r = r - Ap @ np.diag(np.diag(alpha))
+        if norm(r, np.inf) <= eps:
             break
-        beta = np.dot(r.T,r)/r2
-        p = r + np.dot(p,np.diag(np.diag(beta)))
+        beta = np.dot(r.T, r)/r2
+        p = r + np.dot(p, np.diag(np.diag(beta)))
     return x
 
 
@@ -112,7 +110,7 @@ class Optimizer:
         for i, v in enumerate(self.groups[group_idx]):
             embeddings[v] = w.T[i].tolist()
         
-    def get_embeddings (self) :
+    def get_embeddings(self):
         embeddings = {}
         for i, v in enumerate(self.groups[0]) :
             embeddings[v] = self.wt[i].tolist()
