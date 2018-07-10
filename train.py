@@ -4,7 +4,7 @@
 # lam -> lambda
 # min{ (M0i-M00 B)^2+(Mi0-A M00)^2+(Mii-A' M00 B)^2 +
 #      lam*{(M0ib Miib'-M0ib M0ib' A)^2+( Mib0' Mibi-Mibo' Mib0 B)^2} + eta*(A^2+B^2) }
-# TODO：继续优化,仅计算对角线即可,按列向量计算减小复杂度
+# 继续优化,仅计算对角线即可,按列向量计算减小复杂度
 
 import numpy as np
 
