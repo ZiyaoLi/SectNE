@@ -11,15 +11,21 @@ from graph import Graph
 from sample import sample
 
 
-def CGD(initx, A, grad, maxiter):
+LAMBDA = 0.5
+ETA = 0.3
+MAX_ITER = 20
+EPSILON = 1e-8
+
+
+def CGD(x0, A, grad, max_iter):
 
     r = -grad
     if r.all() == 0:  ##
-        return initx  ##
+        return x0  ##
     p = r
     epsilon = 1e-6
-    x = initx
-    for i in range(maxiter):
+    x = x0
+    for i in range(max_iter):
         r2 = np.dot(r.T, r)
         Ap = np.dot(A, p)
         alpha = r2/np.dot(p.T, Ap)
@@ -34,10 +40,12 @@ def CGD(initx, A, grad, maxiter):
 
 
 class Optimizer:
-    def __init__(self, g, sep, lam=0.5, eta=0.3, max_iter=10, criterion=1e-8):
-        self.graph = g
-        self.sep = sep
-        self.m0 = g.calc_matrix(sep[0], sep[0])
+    def __init__(self, graph, groups,
+                 lam=LAMBDA, eta=ETA,
+                 max_iter=MAX_ITER, criterion=EPSILON):
+        self.graph = graph
+        self.sep = groups
+        self.m0 = graph.calc_matrix(groups[0], groups[0])
         u, d, v = np.linalg.svd(self.m0)
         self.wt = np.dot(u, np.diag(np.sqrt(d)))
         self.lam = lam
