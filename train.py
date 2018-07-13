@@ -22,17 +22,17 @@ DIMENSION = 100
 K_SIZE = 200
 
 
-def conjugate_gradient(x, A, grad, max_iter=CG_MAX_ITER, eps=EPSILON):
-    r = -grad
-    if r.all() == 0:  ##
-        return x  ##
+def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=EPSILON):
+    r = b - A @ x
+    if norm(r, np.inf) <= eps:
+        return x
     p = r
-    for i in range(max_iter):
-        r2 = r.T @ r
-        Ap = A @ p
-        alpha = r2 / (p.T @ Ap)
-        x = x + p @ np.diag(np.diag(alpha))
-        r = r - Ap @ np.diag(np.diag(alpha))
+    ite = 0
+    while ite <= max_iter and norm(r, 1) >= eps:
+        ite += 1
+        alphas = sum(r * r)
+        x = x + p * alphas
+        r = b - A @ x
         if norm(r, np.inf) <= eps:
             break
         beta = np.dot(r.T, r)/r2
@@ -68,57 +68,71 @@ class Optimizer:
             ib += self.groups[i]
         return ib
 
-    def train(self, group_idx, embeddings):
+    def train(self, group_idx):
 
         assert group_idx < self.nGroups
         if group_idx == 0:
             return self.phi
-        m0_1 = self.graph.calc_matrix(self.groups[0], self.groups[group_idx])
-        m1_1 = self.graph.calc_matrix(self.groups[group_idx], self.groups[group_idx])
+
         rest_indices = self._get_rest_idx(group_idx)
-        m0_1b = self.graph.calc_matrix(self.groups[0], rest_indices)
-        m1_1b = self.graph.calc_matrix(self.groups[group_idx], rest_indices)
+        t_mm = self.m0_tilde @ self.m0_tilde.T
+
+        # pre-calculate the matrices and intercepts to be used
+        # to minimize the efforts in the loop.
+        m_1_0 = self.graph.calc_matrix(self.groups[group_idx], self.groups[0])
+        m_0_r = self.graph.calc_matrix(self.groups[0], rest_indices)
+        m_1_r = self.graph.calc_matrix(self.groups[group_idx], rest_indices)
+        G0_A = t_mm + self.lam * (m_0_r.T @ m_0_r) + self.eta
+        b0_A = self.m0_tilde @ m_1_0 + self.lam * (m_0_r @ m_1_r.T)
+        del m_1_0, m_0_r, m_1_r
+
+        m_0_1 = self.graph.calc_matrix(self.groups[0], self.groups[group_idx])
+        m_r_0 = self.graph.calc_matrix(rest_indices, self.groups[0])
+        m_r_1 = self.graph.calc_matrix(rest_indices, self.groups[group_idx])
+        G0_B = t_mm.T + self.lam * (m_r_0.T @ m_r_0) + self.eta
+        b0_B = self.m0_tilde.T @ m_0_1 + self.lam * (m_r_0.T @ m_r_1)
+        del m_0_1, m_r_0, m_r_1
+
+        del t_mm, rest_indices
+
+        m_1_1 = self.graph.calc_matrix(self.groups[group_idx], self.groups[group_idx])
 
         # init
-        n_k = len(self.groups[0])
-        n_m1 = len(self.groups[group_idx])
+        n_0 = len(self.groups[0])
+        n_1 = len(self.groups[group_idx])
         # random initial values
-        A = np.random.random((n_k, n_m1))
-        B = np.random.random((n_k, n_m1))
+        A = np.random.random((n_0, n_1))
+        B = np.random.random((n_0, n_1))
         ite = 0
         while ite <= self.max_iter:
             ite += 1
             # fix B update A
-            MB = self.m0_tilde @ B
-            M2 = m0_1b @ m0_1b.T
-            # Hessian
-            HA = self.m0_tilde @ self.m0_tilde + MB @ MB.T + self.lam * (M2 @ M2) + self.eta
-            bA = self.m0_tilde @ m0_1 + MB @ m1_1 + self.lam * (M2 @ (m0_1b @ m1_1b.T))
-            GradA = (HA @ A)-bA
-            A = conjugate_gradient(A, HA, GradA, self.max_iter)
+            t_mb = self.m0_tilde @ B
+            G_A = G0_A + t_mb @ t_mb.T
+            b_A = b0_A + t_mb @ m_1_1.T
+            A = conjugate_gradient(A, G_A, b_A, self.max_iter)
+            del t_mb, G_A, b_A
 
             # fix A update B
-            MA = self.m0_tilde @ A
-            MT = m0_1b @ m0_1b.T
-            # Hessian
-            HB = self.m0_tilde @ self.m0_tilde + MA @ MA.T + self.lam * (MT @ MT) + self.eta
-            bB = self.m0_tilde @ m0_1 + MA @ m1_1 + self.lam * (MT @ (m0_1b @ m1_1b.T))
-            GradB = (HB @ B)-bB
-            B = conjugate_gradient(B, HB, GradB, self.max_iter)
+            t_ma = self.m0_tilde.T @ A
+            G_B = G0_B + t_ma @ t_ma.T
+            b_B = b0_B + t_ma @ m_1_1
+            B = conjugate_gradient(A, G_B, b_B, self.max_iter)
+            del t_ma, G_B, b_B
 
         w = self.phi @ A
-        for i, v in enumerate(self.groups[group_idx]):
-            embeddings[v] = w.T[i].tolist()
+        c = self.psi @ B
+        return w, c
         
-    def get_embeddings(self):
-        embeddings = {}
-        for i, v in enumerate(self.groups[0]) :
-            embeddings[v] = self.wt[i].tolist()
-        print("{} Blocks in All".format(len(self.groups)))
-        for index in range(1, len(self.groups)) :
-            self.train(index, embeddings)
-            print("Block {} Finished!".format(index))
-        return embeddings
+    # def get_embeddings(self):
+    #     embeddings = {}
+    #     for i, v in enumerate(self.groups[0]) :
+    #         embeddings[v] = self.wt[i].tolist()
+    #     print("{} Blocks in All".format(len(self.groups)))
+    #     for index in range(1, len(self.groups)) :
+    #         self.train(index, embeddings)
+    #         print("Block {} Finished!".format(index))
+    #     return embeddings
 
 if __name__ == '__main__':
     net = Graph('wiki.txt', typ=1)
