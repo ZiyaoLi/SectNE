@@ -7,12 +7,6 @@ class Proximity:
         self.prox = set()
         self.degree = 0
 
-    def __getitem__(self, item):
-        return self.prox[item]
-
-    def __setitem__(self, key, value):
-        self.prox[key] = value
-
     def __len__(self):
         return self.degree
 
@@ -49,7 +43,7 @@ class Graph:
     def __init__(self, filename, sep='\t', typ=0):
         self.vertices = []
         self.size = 0
-        self.nedges = 0
+        self.nEdges = 0
         f = open(filename, 'r')
         s = f.readline()
         while len(s):
@@ -74,10 +68,10 @@ class Graph:
         self.add_vertex(vinid)
         self.add_vertex(voutid)
         self.vertices[vinid].add(voutid)
-        self.nedges += 1
+        self.nEdges += 1
         if typ == 1:
             self.vertices[voutid].add(vinid)
-            self.nedges += 1
+            self.nEdges += 1
 
     def fetch_subset(self, indices):
         rst = []
