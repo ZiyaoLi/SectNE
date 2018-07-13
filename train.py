@@ -19,8 +19,8 @@ MAX_ITER = 100
 CG_MAX_ITER = 20
 EPSILON = 1e-4
 CG_EPSILON = 1e-8
-DIMENSION = 2
-K_SIZE = 3
+DIMENSION = 100
+K_SIZE = 200
 
 
 def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=EPSILON):
@@ -213,6 +213,16 @@ if __name__ == '__main__':
     tt = norm(original, 'fro')
     print("Original - %.4f, delta - %.4f, percentage - %.4f"
           % (tt, t, t / tt))
+
+    # a SVD implementation to exam how good is the result
+    u, d, v = np.linalg.svd(original)
+    w_svd = (u[:, :2] @ np.diag(np.sqrt(d[:2]))).T
+    c_svd = (v.T[:, :2] @ np.diag(np.sqrt(d[:2]))).T
+    reconstruct_svd = w_svd.T @ c_svd
+    delta_svd = original - reconstruct_svd
+    t_svd = norm(delta_svd, 'fro')
+    print("Original - %.4f, delta - %.4f, percentage - %.4f"
+          % (tt, t_svd, t_svd / tt))
 
 
 
