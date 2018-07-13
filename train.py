@@ -158,9 +158,9 @@ class Optimizer:
 
 if __name__ == '__main__':
     net = Graph('sample.txt', typ=1)
-    k_set = sample(net, K_SIZE, 'deg^2')
+    k_set = sample(net, k=3, method='deg^2')
     sep = [[3, 4, 7], [1, 0, 6], [2, 8], [5, 9]]
-    model = Optimizer(net, sep)
+    model = Optimizer(net, sep, dim=2)
     vecs_w = []
     vecs_c = []
     for t in range(4):
@@ -181,8 +181,8 @@ if __name__ == '__main__':
     delta = original - reconstruct
     t = norm(delta, np.inf)
     tt = norm(original, np.inf)
-    print(t)
-
+    print("Original - %.4f, delta - %.4f, percentage - %.4f"
+          % (tt, t, t / tt))
 
 
 
