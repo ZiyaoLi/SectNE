@@ -73,6 +73,9 @@ class Graph:
             self.vertices[voutid].add(vinid)
             self.nEdges += 1
 
+    def fetch_prox(self, vid):
+        return self.vertices[vid].prox
+
     def fetch_subset(self, indices):
         rst = []
         for t in indices:
