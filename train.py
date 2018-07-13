@@ -7,6 +7,11 @@
 
 # please notice that @ operator is for matrix multiplication
 
+# for A = (a1, a2, ..., an) where a_i are column vectors,
+#     B = (b1, b2, ..., bn) with the same shape, the function
+#     sum(A * B) gives the vector
+#             (<a1, b1>, <a2, b2>, ..., <an, bn>).
+
 import numpy as np
 from numpy.linalg import norm
 from graph import Graph
@@ -23,20 +28,23 @@ K_SIZE = 200
 
 
 def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=EPSILON):
-    r = b - A @ x
-    if norm(r, np.inf) <= eps:
-        return x
-    p = r
     ite = 0
-    while ite <= max_iter and norm(r, 1) >= eps:
+    r = b - A @ x
+    rho = sum(r * r)
+    while ite <= max_iter and (rho > eps).any():
         ite += 1
-        alphas = sum(r * r)
-        x = x + p * alphas
-        r = b - A @ x
-        if norm(r, np.inf) <= eps:
-            break
-        beta = np.dot(r.T, r)/r2
-        p = r + np.dot(p, np.diag(np.diag(beta)))
+        if ite == 1:
+            p = r
+        else:
+            beta = rho / rho_tilde
+            p = r + beta * p
+
+        w = A @ p
+        alpha = rho / sum(p * w)
+        x = x + alpha * p
+        r = r - alpha * w
+        rho_tilde = rho
+        rho = sum(r * r)
     return x
 
 
@@ -84,6 +92,7 @@ class Optimizer:
         m_1_r = self.graph.calc_matrix(self.groups[group_idx], rest_indices)
         G0_A = t_mm + self.lam * (m_0_r.T @ m_0_r) + self.eta
         b0_A = self.m0_tilde @ m_1_0 + self.lam * (m_0_r @ m_1_r.T)
+        # delete useless variables in time.
         del m_1_0, m_0_r, m_1_r
 
         m_0_1 = self.graph.calc_matrix(self.groups[0], self.groups[group_idx])
@@ -135,6 +144,7 @@ class Optimizer:
     #     return embeddings
 
 if __name__ == '__main__':
-    net = Graph('wiki.txt', typ=1)
+    net = Graph('sample.txt', typ=1)
     k_set = sample(net, K_SIZE, 'deg^2')
     model = Optimizer(net, [k_set])
+
