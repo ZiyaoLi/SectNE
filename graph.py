@@ -26,7 +26,7 @@ class VSet:
 
     def __init__(self, net, indices):
         self.num = len(indices)
-        self.len = net.size
+        self.len = net.nVertices
         self.vertices = net.fetch_subset(indices)
 
     def __mul__(self, other):
@@ -42,7 +42,7 @@ class Graph:
 
     def __init__(self, filename, sep='\t', typ=0):
         self.vertices = []
-        self.size = 0
+        self.nVertices = 0
         self.nEdges = 0
         f = open(filename, 'r')
         s = f.readline()
@@ -54,14 +54,14 @@ class Graph:
             s = f.readline()
 
     def add_vertex(self, vid):
-        if self.size > vid:
+        if self.nVertices > vid:
             if self.vertices[vid] is None:
                 self.vertices[vid] = Proximity()
         else:
-            for t in range(vid + 1 - self.size):
+            for t in range(vid + 1 - self.nVertices):
                 self.vertices.append(None)
             self.vertices[vid] = Proximity()
-            self.size = vid + 1
+            self.nVertices = vid + 1
 
     def add_edge(self, vinid, voutid, typ=0):
         # typ - 0 for direct, 1 for undirect
