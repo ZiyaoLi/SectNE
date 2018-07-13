@@ -12,8 +12,9 @@ from graph import Graph
 from sample import sample
 
 
+THETA = 1
 LAMBDA = 0.5
-ETA = 0
+ETA = 0.1
 MAX_ITER = 100
 CG_MAX_ITER = 20
 EPSILON = 1e-4
@@ -59,19 +60,23 @@ def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=EPSILON):
 class Optimizer:
     def __init__(self, graph, groups,
                  dim=DIMENSION,
-                 lam=LAMBDA, eta=ETA,
+                 theta=THETA, lam=LAMBDA, eta=ETA,
                  max_iter=MAX_ITER, epsilon=CG_EPSILON):
         self.graph = graph
         self.groups = groups
         self.nGroups = len(groups)
         self.lam = lam
         self.eta = eta
+        self.theta = theta
         self.max_iter = max_iter
         self.eps = epsilon
 
-        # k decomposition: SVD
+        # fetch all matrix related to k at first to save time
+        # in sequential embedding process.
         self.m_0_all = self.graph.calc_matrix(groups[0], list(range(graph.nVertices)))
         self.m_all_0 = self.graph.calc_matrix(list(range(graph.nVertices)), groups[0])
+
+        # k decomposition: SVD
         m0 = self.m_0_all[:, groups[0]]
         u, d, v = np.linalg.svd(m0)
         self.phi = (u[:, :dim] @ np.diag(np.sqrt(d[:dim]))).T
@@ -140,15 +145,15 @@ class Optimizer:
             ite += 1
             # fix B update A
             t_mb = self.m0_tilde @ B_prev
-            G_A = G0_A + t_mb @ t_mb.T
-            b_A = b0_A + t_mb @ m_1_1.T
+            G_A = G0_A + self.theta * (t_mb @ t_mb.T)
+            b_A = b0_A + self.theta * (t_mb @ m_1_1.T)
             A = conjugate_gradient(A_prev, G_A, b_A, self.max_iter)
             del t_mb, G_A, b_A
 
             # fix A update B
             t_ma = self.m0_tilde.T @ A_prev
-            G_B = G0_B + t_ma @ t_ma.T
-            b_B = b0_B + t_ma @ m_1_1
+            G_B = G0_B + self.theta * (t_ma @ t_ma.T)
+            b_B = b0_B + self.theta * (t_ma @ m_1_1)
             B = conjugate_gradient(A_prev, G_B, b_B, self.max_iter)
             del t_ma, G_B, b_B
 

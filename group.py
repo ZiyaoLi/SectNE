@@ -28,7 +28,7 @@ class Louvain:
         visit_sequence = self.net.get_vertices()
         random.shuffle(visit_sequence)        
         while True:
-            can_stop = True #第一阶段是否可终止
+            can_stop = True  # 第一阶段是否可终止
             for v_vid in visit_sequence:
                 v_cid = self._vid_vertex[v_vid]._cid
                 k_v = sum(self.net.vertices[v_vid].weights.values()) + self._vid_vertex[v_vid]._kin
