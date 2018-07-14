@@ -33,7 +33,17 @@ original = net.calc_matrix(all_idx, all_idx)
 # evaluate the reconstruction performance
 delta = original - reconstruct
 abs_delta = abs(delta)
-t = norm(delta, np.inf)
-tt = norm(original, np.inf)
+t = norm(delta, 'fro')
+tt = norm(original, 'fro')
 print("Original - %.4f, delta - %.4f, percentage - %.4f"
       % (tt, t, t / tt))
+
+# a SVD implementation to exam how good is the result
+u, d, v = np.linalg.svd(original)
+w_svd = (u[:, :100] * np.sqrt(d[:100])).T
+c_svd = (v.T[:, :100] * np.sqrt(d[:100])).T
+reconstruct_svd = w_svd.T @ c_svd
+delta_svd = original - reconstruct_svd
+t_svd = norm(delta_svd, 'fro')
+print("Original - %.4f, delta - %.4f, percentage - %.4f"
+      % (tt, t_svd, t_svd / tt))
