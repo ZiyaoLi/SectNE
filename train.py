@@ -79,8 +79,8 @@ class Optimizer:
         # k decomposition: SVD
         m0 = self.m_0_all[:, groups[0]]
         u, d, v = np.linalg.svd(m0)
-        self.phi = (u[:, :dim] @ np.diag(np.sqrt(d[:dim]))).T
-        self.psi = (v.T[:, :dim] @ np.diag(np.sqrt(d[:dim]))).T
+        self.phi = (u[:, :dim] * np.sqrt(d[:dim])).T
+        self.psi = (v.T[:, :dim] * np.sqrt(d[:dim])).T
         self.m0_tilde = self.phi.T @ self.psi
 
     def _get_rest_idx(self, group_idx):
