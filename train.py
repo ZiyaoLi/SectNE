@@ -216,8 +216,8 @@ if __name__ == '__main__':
 
     # a SVD implementation to exam how good is the result
     u, d, v = np.linalg.svd(original)
-    w_svd = (u[:, :2] @ np.diag(np.sqrt(d[:2]))).T
-    c_svd = (v.T[:, :2] @ np.diag(np.sqrt(d[:2]))).T
+    w_svd = (u[:, :2] * np.sqrt(d[:2])).T
+    c_svd = (v.T[:, :2] * np.sqrt(d[:2])).T
     reconstruct_svd = w_svd.T @ c_svd
     delta_svd = original - reconstruct_svd
     t_svd = norm(delta_svd, 'fro')
