@@ -1,87 +1,160 @@
 import graph
 import random
+import numpy as np
 
 # Louvain Algorithm
 # Vincent D. Blondel et al, Fast Unfolding of Communities in Large Networks, Phy.Rev.E, 2008
 
 
-class Vertex:
-    def __init__(self, vid, cid, nodes, k_in=0):
-        self._vid = vid  # node id
-        self._cid = cid  # community id
-        self._nodes = nodes
-        self._kin = k_in  #结点内部的边的权重
+class Community:
+    def __init__(self, vid, v_prox):
+        self.vertices = {vid}
+        self.total_links = 0
+        self.total_degree = len(v_prox)
+        self.n_vertices = 1
+
+    def add(self, vid, v_prox):
+        if isinstance(v_prox, set):
+            self.vertices.add(vid)
+            self.total_links += self.eval_inject(v_prox)
+            self.total_degree += len(v_prox)
+            self.n_vertices += 1
+
+    def remove(self, vid, v_prox):
+        self.vertices.remove(vid)
+        self.total_links -= self.eval_inject(v_prox)
+        self.total_degree -= len(v_prox)
+        self.n_vertices -= 1
+
+    def eval_inject(self, prox):
+        '''
+        evaluate the injection amount from (a node with)
+            a given proximity set. for undirected graphs,
+            this injection amount equals to injection amount
+            from a community to a node.
+        :param prox: proximity set
+        :return: evaluated value
+        '''
+        return len(self.vertices.intersection(prox))
 
 
 class Louvain:
     def __init__(self, net):
         self.net = net
-        self.nEdge = net.nEdges
-        self._cid_vertices = {} #需维护的关于社区的信息(社区编号,其中包含的结点编号的集合)
-        self._vid_vertex = {}   #需维护的关于结点的信息(结点编号，相应的Vertex实例)
-        for vid in self.net.get_vertices():
-            self._cid_vertices[vid] = set([vid])
-            self._vid_vertex[vid] = Vertex(vid, vid, set([vid]))        
+        self.communities = []  # a list of communities
+        self.vertex_cids = []  # the current community_ids of vertices
+        for vid in range(self.net.nVertices):
+            self.communities.append(Community(vid, self.net.fetch_prox(vid)))
+            self.vertex_cids.append(vid)
+
+    def adjust_community(self, vid, cid, v_prox):
+        '''
+        move a vertex (vid) to a community (cid)
+        :param vid: vertex
+        :param cid: community
+        :return: None
+        '''
+        cid_prev = self.vertex_cids[vid]
+        self.vertex_cids[vid] = cid
+        self.communities[cid_prev].remove(vid, v_prox)
+        self.communities[cid].add(vid, v_prox)
+        # clear out empty communities
+        if self.communities[cid_prev].n_vertices == 0:
+            self.communities[cid_prev] = None
+
+    def loss_modularity(self, cid, prox):
+        '''
+        evaluate the loss of modularity if remove a node
+            with given proximity set from the community.
+        :formula: (ignore the constants)
+            v = n_links_thisNode2communityNodes +
+                n_links_communityNodes2thisNode +
+                -2 x (degree_thisNode x (degree_communityTotal - degree_thisNode))
+            if undirected, this reduces to
+            v = n_links_between_thisNode_communityNodes -
+                degree_thisNode x (degree_communityTotal - degree_thisNode)
+        :param cid: comm
+        :param prox: proximity set
+        :return: evaluated value
+        '''
+        comm = self.communities[cid]
+        return comm.eval_inject(prox) - \
+            len(prox) * (comm.total_degree - len(prox)) / self.net.nEdges / 2
+
+    def gain_modularity(self, cid, prox):
+        '''
+        very similar with loss_modularity().
+        '''
+        comm = self.communities[cid]
+        return comm.eval_inject(prox) - \
+            len(prox) * comm.total_degree / self.net.nEdges / 2
 
     def first_stage(self):
-        mod_inc = False  #用于判断算法是否可终止
-        visit_sequence = self.net.get_vertices()
-        random.shuffle(visit_sequence)        
+        # whether there is ops in this function
+        sign_increase = False
+        visit_sequence = list(range(self.net.nVertices))
         while True:
-            can_stop = True  # 第一阶段是否可终止
-            for v_vid in visit_sequence:
-                v_cid = self._vid_vertex[v_vid]._cid
-                k_v = sum(self.net.vertices[v_vid].weights.values()) + self._vid_vertex[v_vid]._kin
+            # whether there is ops in this loop
+            sign_loop_increase = False
+            # shuffle the sequence
+            # random.shuffle(visit_sequence)
+            for i_vid in visit_sequence:
+                i_cid = self.vertex_cids[i_vid]
+                i_prox = self.net.fetch_prox(i_vid)
+                tried_cids = {i_cid}
 
-                cid_Q = {}
-                for w_vid in self.net.vertices[v_vid].prox:
-                    w_cid = self._vid_vertex[w_vid]._cid
-                    if w_cid in cid_Q:
+                max_increase = 0
+                max_increase_cid = -1
+
+                for j_vid in self.net.fetch_prox(i_vid):
+                    j_cid = self.vertex_cids[j_vid]
+                    if j_cid in tried_cids:
                         continue
                     else:
-                        tot = sum([sum(self.net.vertices[k].weights.values()) + self._vid_vertex[k]._kin for k in self._cid_vertices[w_cid]])
-                        if w_cid == v_cid:
-                            tot -= k_v
-                        k_v_in = sum([v for k,v in self.net.vertices[v_vid].weights.items() if k in self._cid_vertices[w_cid]])
-                        delta_Q = k_v_in - k_v * tot / self.nEdge  #由于只需要知道delta_Q的正负，所以少乘了1/(2*self._m)
-                        cid_Q[w_cid] = delta_Q                    
+                        delta_q = self.gain_modularity(j_cid, i_prox) - \
+                            self.loss_modularity(i_cid, i_prox)
+                        tried_cids.add(j_cid)
+                        if delta_q > max_increase:
+                            max_increase = delta_q
+                            max_increase_cid = j_cid
 
-                cid,max_delta_Q = sorted(cid_Q.items(),key=lambda item:item[1],reverse=True)[0]
-                if max_delta_Q > 0.0 and cid!=v_cid:
-                    self._vid_vertex[v_vid]._cid = cid
-                    self._cid_vertices[cid].add(v_vid)
-                    self._cid_vertices[v_cid].remove(v_vid)
-                    can_stop = False
-                    mod_inc = True            
-            if can_stop:
-                break        
-        return mod_inc
+                if max_increase > 0:
+                    self.adjust_community(i_vid, max_increase_cid, i_prox)
+                    # modify the signs
+                    sign_loop_increase = True
+                    sign_increase = True
+
+            if not sign_loop_increase:
+                # indicates no ops in this iteration
+                break
+
+        return sign_increase
 
     def second_stage(self):
         cid_vertices = {}
         vid_vertex = {}
-        for cid,vertices in self._cid_vertices.items():
+        for cid,vertices in self.communities.items():
             if len(vertices) == 0:
                 continue
             
             new_vertex = Vertex(cid, cid, set())
             for vid in vertices:
-                new_vertex._nodes.update(self._vid_vertex[vid]._nodes)
-                new_vertex._kin += self._vid_vertex[vid]._kin
+                new_vertex.nodes.update(self.vertex_cids[vid]._nodes)
+                new_vertex.kin += self.vertex_cids[vid]._kin
                 if vid >= self.net.nVertices or self.net.vertices[vid] is None:
                     continue
                 for k,v in self.net.vertices[vid].weights.items() :
                     if k in vertices:
-                        new_vertex._kin += v/2.0
+                        new_vertex.kin += v / 2.0
             
             cid_vertices[cid] = set([cid])
             vid_vertex[cid] = new_vertex    
 
         G = graph.Graph() 
-        for cid1,vertices1 in self._cid_vertices.items():
+        for cid1,vertices1 in self.communities.items():
             if len(vertices1) == 0:
                 continue
-            for cid2,vertices2 in self._cid_vertices.items():
+            for cid2,vertices2 in self.communities.items():
                 if cid2<=cid1 or len(vertices2)==0:
                     continue
                 edge_weight = 0.0
@@ -94,24 +167,24 @@ class Louvain:
                 if edge_weight != 0:
                     G.add_edge(cid1,cid2,typ=1,w=edge_weight)    
 
-        self._cid_vertices = cid_vertices
-        self._vid_vertex = vid_vertex
+        self.communities = cid_vertices
+        self.vertex_cids = vid_vertex
         self.net = G
 
     def get_communities(self):
         communities = []
-        for vertices in self._cid_vertices.values():
+        for vertices in self.communities.values():
             if len(vertices) != 0:
                 c = set()
                 for vid in vertices:
-                    c.update(self._vid_vertex[vid]._nodes)
+                    c.update(self.vertex_cids[vid]._nodes)
                 communities.append(c)
         return communities
 
     def execute(self):
-        iter_time = 1
+        ite = 1
         while True:
-            iter_time += 1
+            ite += 1
             mod_inc = self.first_stage()
             if mod_inc:
                 self.second_stage()
@@ -120,11 +193,10 @@ class Louvain:
         return self.get_communities()
 
 
-
 # 把所有一个节点的社团合并?
 # 先分群,再剔除抽出的k个节点?
 
-def Group (G, ksample) :    
+def group(G, ksample):
     algorithm = Louvain(G)
     communities = algorithm.execute()
     result = []
@@ -142,7 +214,7 @@ def Group (G, ksample) :
     return result
 
 if __name__ == '__main__':
-    G = graph.Graph('.\graph.txt', sep=' ', typ=1)
+    G = graph.Graph('.\wiki.txt', sep='\t', typ=1)
     algorithm = Louvain(G)
     communities = algorithm.execute()
     for c in communities:
