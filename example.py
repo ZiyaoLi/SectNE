@@ -1,26 +1,28 @@
 from graph import Graph
 from sample import sample
 from train import Optimizer
+from group import Louvain, groups2inv_index, pure_override_nodes
 import numpy as np
 from numpy.linalg import norm
 
 net = Graph('wiki.txt', typ=1)
 k_set = sample(net, k=200, method='deg_deter')
-sep = [k_set]
-all_idx = k_set.copy()
-for i in range(net.nVertices):
-    if i not in k_set:
-        sep.append([i])
-        all_idx.append(i)
-model = Optimizer(net, sep, dim=100)
+grouping_model = Louvain(net)
+groups = grouping_model.execute()
+inv_index = groups2inv_index(groups, net.nVertices, k_set)
+pure_override_nodes(groups, inv_index)
+groups = [k_set] + groups
+model = Optimizer(net, groups, dim=100)
 vecs_w = []
 vecs_c = []
-for t in range(len(sep)):
-    if not t % 10:
-        print(t)
-    w, c = model.train(t)
+
+all_idx = []
+for t in range(len(groups)):
+    print("%d / %d..." % (t + 1, len(groups)))
+    w, c = model.train(t, verbose=2)
     vecs_w.append(w)
     vecs_c.append(c)
+    all_idx += groups[t]
 
 # concatenate all the derived vectors together
 ws = np.concatenate(vecs_w, 1)
