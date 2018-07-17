@@ -5,6 +5,8 @@ import numpy as np
 # Louvain Algorithm
 # Vincent D. Blondel et al, Fast Unfolding of Communities in Large Networks, Phy.Rev.E, 2008
 
+MAX_ITER = 10
+
 
 class Community:
     def __init__(self, comm_id):
@@ -286,9 +288,9 @@ class Louvain:
             groups.append(meta_node.vertices)
         return groups
 
-    def execute(self):
+    def execute(self, max_iter=MAX_ITER):
         ite = 0
-        while True:
+        while ite < max_iter:
             ite += 1
             sign_increase = self.first_stage()
             if sign_increase:
