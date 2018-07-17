@@ -16,9 +16,9 @@ THETA = 1
 LAMBDA = 0.8
 ETA = 0.1
 MAX_ITER = 100
-CG_MAX_ITER = 20
-EPSILON = 1e-4
-CG_EPSILON = 1e-8
+CG_MAX_ITER = 30
+EPSILON = 1e-6
+CG_EPSILON = 1e-4
 DIMENSION = 100
 K_SIZE = 200
 
@@ -33,7 +33,7 @@ def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=EPSILON):
     :param b: vector(matrix) in problem Ax = b. Notice that b \in R^(n x p).
     :param max_iter: max iterations
     :param eps: stop criterion
-    :return: optimized x
+    :return: optimized x, algorithm state
     '''
     b_norms = sum(b * b)
     criterion = eps * b_norms
@@ -54,7 +54,7 @@ def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=EPSILON):
         r = r - alpha * w
         rho_tilde = rho
         rho = sum(r * r)
-    return x
+    return x, ite == max_iter
 
 
 class Optimizer:
@@ -94,7 +94,7 @@ class Optimizer:
             ib += self.groups[i]
         return ib
 
-    def train(self, group_idx):
+    def train(self, group_idx, verbose=1):
 
         assert group_idx < self.nGroups
         if group_idx == 0:
@@ -150,19 +150,26 @@ class Optimizer:
             t_mb = self.m0_tilde @ B_prev
             G_A = G0_A + self.theta * (t_mb @ t_mb.T)
             b_A = b0_A + self.theta * (t_mb @ m_1_1.T)
-            A = conjugate_gradient(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
+            A, state_A = conjugate_gradient(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
             del t_mb, G_A, b_A
 
             # fix A update B
             t_ma = self.m0_tilde.T @ A_prev
             G_B = G0_B + self.theta * (t_ma @ t_ma.T)
             b_B = b0_B + self.theta * (t_ma @ m_1_1)
-            B = conjugate_gradient(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
+            B, state_B = conjugate_gradient(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
             del t_ma, G_B, b_B
 
             altered = norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf)
             A_prev = A
             B_prev = B
+
+            if (state_A or state_B) and (verbose == 2):
+                print("Warning: CG doesn't converge at iter %d, group %d"
+                      % (ite, group_idx))
+
+        if ite == self.max_iter and verbose >= 1:
+            print("Warning: optimization doesn't converge for group %d" % group_idx)
 
         w = self.phi @ A
         c = self.psi @ B
