@@ -47,7 +47,6 @@ def reservoir_deter(probs, k):
 
 
 def sample(net, k, method='deg_prob', size_index=None):
-    rst = []
     if method == 'deg_prob':
         probs = [len(v) for v in net.vertices]
         rst = reservoir(probs, k)
@@ -60,22 +59,26 @@ def sample(net, k, method='deg_prob', size_index=None):
     elif method == 'deg|group_prob':
         degs = np.array([len(v) for v in net.vertices])
         sizes = np.array(size_index)
-        probs = degs / sizes
+        not_sep = (sizes > 1)
+        probs = not_sep * degs / sizes
         rst = reservoir(probs, k)
     elif method == 'deg^2|group_prob':
         degs = np.array([len(v) ** 2 for v in net.vertices])
         sizes = np.array(size_index)
-        probs = degs / sizes
+        not_sep = (sizes > 1)
+        probs = not_sep * degs / sizes
         rst = reservoir(probs, k)
     elif method == 'deg|group_deter':
         degs = np.array([len(v) for v in net.vertices])
         sizes = np.array(size_index)
-        probs = degs / sizes
+        not_sep = (sizes > 1)
+        probs = not_sep * degs / sizes
         rst = reservoir_deter(probs, k)
     elif method == 'deg^2|group_deter':
         degs = np.array([len(v) ** 2 for v in net.vertices])
         sizes = np.array(size_index)
-        probs = degs / sizes
+        not_sep = (sizes > 1)
+        probs = not_sep * degs / sizes
         rst = reservoir_deter(probs, k)
     else:
         raise AssertionError
