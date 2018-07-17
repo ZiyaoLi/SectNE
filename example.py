@@ -18,7 +18,8 @@ vecs_c = []
 
 all_idx = []
 for t in range(len(groups)):
-    print("%d / %d..." % (t + 1, len(groups)))
+    print("%d / %d, number of vertices = %d..."
+          % (t + 1, len(groups), len(groups[t])))
     w, c = model.train(t, verbose=2)
     vecs_w.append(w)
     vecs_c.append(c)

@@ -192,7 +192,7 @@ class Louvain:
             # whether there is ops in this loop
             sign_loop_increase = False
             # shuffle the sequence
-            # random.shuffle(visit_sequence)
+            random.shuffle(visit_sequence)
             for meta_id_i in visit_sequence:
                 meta_node_i = self.meta_nodes[meta_id_i]
                 comm_id_i = meta_node_i.community  # current community of node i
