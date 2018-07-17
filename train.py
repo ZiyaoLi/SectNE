@@ -13,7 +13,7 @@ from sample import sample
 
 
 THETA = 1
-LAMBDA = 0.5
+LAMBDA = 0.8
 ETA = 0.1
 MAX_ITER = 100
 CG_MAX_ITER = 20

@@ -31,6 +31,20 @@ def reservoir(probs, k):
     return rst
 
 
+def reservoir_deter(probs, k):
+    heap = []
+    for idx, weight in enumerate(probs):
+        if len(heap) < k:
+            hq.heappush(heap, (idx, weight))
+        else:
+            if weight > heap[0][1]:
+                hq.heapreplace(heap, (idx, weight))
+    rst = []
+    while len(heap) > 0:
+        rst.append(hq.heappop(heap)[0])
+    return rst
+
+
 def sample(net, k, method='deg'):
     assert method in ('deg', 'deg^2')
     rst = []
@@ -40,6 +54,9 @@ def sample(net, k, method='deg'):
     elif method == 'deg^2':
         probs = [len(v) ** 2 for v in net.vertices]
         rst = reservoir(probs, k)
+    elif method == 'deg_deter':
+        probs = [len(v) for v in net.vertices]
+        rst = reservoir_deter(probs, k)
     return rst
 
 

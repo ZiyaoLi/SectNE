@@ -5,7 +5,7 @@ import numpy as np
 from numpy.linalg import norm
 
 net = Graph('wiki.txt', typ=1)
-k_set = sample(net, k=200, method='deg^2')
+k_set = sample(net, k=200, method='deg_deter')
 sep = [k_set]
 all_idx = k_set.copy()
 for i in range(net.nVertices):
