@@ -61,7 +61,8 @@ class Optimizer:
     def __init__(self, graph, groups,
                  dim=DIMENSION,
                  theta=THETA, lam=LAMBDA, eta=ETA,
-                 max_iter=MAX_ITER, epsilon=CG_EPSILON):
+                 max_iter=MAX_ITER, epsilon=EPSILON,
+                 cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON):
         self.graph = graph
         self.groups = groups
         self.nGroups = len(groups)
@@ -70,6 +71,8 @@ class Optimizer:
         self.theta = theta
         self.max_iter = max_iter
         self.eps = epsilon
+        self.cg_max_iter = cg_max_iter
+        self.cg_eps = cg_eps
 
         # fetch all matrix related to k at first to save time
         # in sequential embedding process.
@@ -147,14 +150,14 @@ class Optimizer:
             t_mb = self.m0_tilde @ B_prev
             G_A = G0_A + self.theta * (t_mb @ t_mb.T)
             b_A = b0_A + self.theta * (t_mb @ m_1_1.T)
-            A = conjugate_gradient(A_prev, G_A, b_A, self.max_iter)
+            A = conjugate_gradient(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
             del t_mb, G_A, b_A
 
             # fix A update B
             t_ma = self.m0_tilde.T @ A_prev
             G_B = G0_B + self.theta * (t_ma @ t_ma.T)
             b_B = b0_B + self.theta * (t_ma @ m_1_1)
-            B = conjugate_gradient(A_prev, G_B, b_B, self.max_iter)
+            B = conjugate_gradient(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
             del t_ma, G_B, b_B
 
             altered = norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf)
