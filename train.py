@@ -16,11 +16,87 @@ THETA = 1
 LAMBDA = 0.8
 ETA = 0.1
 MAX_ITER = 200
-CG_MAX_ITER = 50
-EPSILON = 1e-3
-CG_EPSILON = 1e-3
+CG_MAX_ITER = 30
+EPSILON = 1e-4
+CG_EPSILON = 1e-4
 DIMENSION = 100
 K_SIZE = 200
+N_HISTORY_MONITOR = 5
+THRESHOLD_MONITOR = 0.05
+PERCT_AVG = 0.55
+
+
+# def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
+#     '''
+#     Implemented from algorithm CG for SPD matrix linear equations,
+#     from XU, Shufang, et. Numerical Linear Algebra.
+#     :param x: initial value x0. Can be matrix of size (n x p) for a
+#               p-parallel CG.
+#     :param A: matrix in problem Ax = b.
+#     :param b: vector(matrix) in problem Ax = b. Notice that b \in R^(n x p).
+#     :param max_iter: max iterations
+#     :param eps: stop criterion
+#     :return: optimized x, algorithm state, residual squares
+#     '''
+#     b_norms = sum(b * b)
+#     criterion = eps * b_norms
+#     ite = 0
+#     r = b - A @ x
+#     rho = sum(r * r)
+#     while ite < max_iter and (rho > criterion).any():
+#         ite += 1
+#         if ite == 1:
+#             p = r
+#         else:
+#             beta = rho / rho_tilde
+#             p = r + beta * p
+#
+#         w = A @ p
+#         alpha = rho / sum(p * w)
+#         x = x + alpha * p
+#         r = r - alpha * w
+#         rho_tilde = rho
+#         rho = sum(r * r)
+#     return x, ite == max_iter, rho / b_norms
+
+
+# def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
+#     '''
+#     Implemented from algorithm CG for SPD matrix linear equations,
+#     from XU, Shufang, et. Numerical Linear Algebra.
+#     :param x: initial value x0. Can be matrix of size (n x p) for a
+#               p-parallel CG.
+#     :param A: matrix in problem Ax = b.
+#     :param b: vector(matrix) in problem Ax = b. Notice that b \in R^(n x p).
+#     :param max_iter: max iterations
+#     :param eps: stop criterion
+#     :return: optimized x, algorithm state, residual squares
+#     '''
+#     b_norms = sum(b * b)
+#     criterion = eps * b_norms
+#     ite = 0
+#     r = b - A @ x
+#     m = np.diag(A)
+#     rho_r = sum(r * r)
+#     while ite < max_iter and (rho_r > criterion).any():
+#         ite += 1
+#         z = (r.T / m).T
+#         if ite == 1:
+#             p = z
+#             rho = sum(r * z)
+#         else:
+#             rho_tilde = rho
+#             rho = sum(r * z)
+#             beta = rho / rho_tilde
+#             p = z + beta * p
+#
+#         w = A @ p
+#         alpha = rho / sum(p * w)
+#         x = x + alpha * p
+#         r = r - alpha * w
+#         rho_r = sum(r * r)
+#
+#     return x, ite == max_iter, rho_r / b_norms
 
 
 def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
@@ -35,26 +111,7 @@ def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
     :param eps: stop criterion
     :return: optimized x, algorithm state, residual squares
     '''
-    b_norms = sum(b * b)
-    criterion = eps * b_norms
-    ite = 0
-    r = b - A @ x
-    rho = sum(r * r)
-    while ite < max_iter and (rho > criterion).any():
-        ite += 1
-        if ite == 1:
-            p = r
-        else:
-            beta = rho / rho_tilde
-            p = r + beta * p
-
-        w = A @ p
-        alpha = rho / sum(p * w)
-        x = x + alpha * p
-        r = r - alpha * w
-        rho_tilde = rho
-        rho = sum(r * r)
-    return x, ite == max_iter, rho / b_norms
+    return np.linalg.inv(A) @ b, False, np.zeros(b.shape[1])
 
 
 class Optimizer:
@@ -144,6 +201,7 @@ class Optimizer:
         # B_prev = np.zeros((n_0, n_1))
         ite = 0
         altered = np.inf  # initial 'altered' doesn't stop the loop
+        hist_altered = [np.inf] * N_HISTORY_MONITOR
         while ite < self.max_iter and altered > self.eps:
             ite += 1
             # fix B update A
@@ -160,7 +218,12 @@ class Optimizer:
             B, state_B, res_B = conjugate_gradient(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
             del t_ma, G_B, b_B
 
-            altered = norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf)
+            altered = (norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf)) / A.shape[1]
+            hist_altered = hist_altered[1:] + [altered]
+            improve_percentage = (np.mean(hist_altered) - altered) / altered
+            if improve_percentage < THRESHOLD_MONITOR:
+                A = A * PERCT_AVG + A_prev * (1 - PERCT_AVG)
+                B = B * PERCT_AVG + B_prev * (1 - PERCT_AVG)
             A_prev = A
             B_prev = B
 
@@ -198,7 +261,7 @@ class Optimizer:
 
 if __name__ == '__main__':
     net = Graph('sample.txt', typ=1)
-    k_set = sample(net, k=3, method='deg^2')
+    k_set = sample(net, k=3, method='deg^2_prob')
     sep = [[3, 4, 7], [1, 0, 6], [2, 8], [5, 9]]
     model = Optimizer(net, sep, dim=2)
     vecs_w = []
