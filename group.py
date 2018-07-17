@@ -298,25 +298,28 @@ class Louvain:
         return self.get_groups()
 
 
-# 把所有一个节点的社团合并?
-# 先分群,再剔除抽出的k个节点?
+def groups2inv_index(groups, n_vertices, override_set=set()):
+    if not isinstance(override_set, set):
+        override_set = set(override_set)
+    inverse_index = [-1] * n_vertices
+    for i in override_set:
+        inverse_index[i] = 0
+    for group_id, group in enumerate(groups):
+        for i in group:
+            if inverse_index[i] < 0:
+                inverse_index[i] = group_id + 1
+    return inverse_index
 
-def group(G, ksample):
-    algorithm = Louvain(G)
-    communities = algorithm.execute()
-    result = []
-    one = []
-    result.append(ksample)
-    kset = set(ksample)
-    for c in communities:
-        c = c - kset
-        clist = list(c)
-        if len(clist) > 1:
-            result.append(clist)
-        elif len(clist) == 1:
-            one.append(clist[0])
-    result.append(one)
-    return result
+
+def pure_override_nodes(groups, inv_index):
+    for group_id, group in enumerate(groups):
+        t = 0
+        while t < len(group):
+            if inv_index[group[t]] == 0:
+                group.remove(group[t])
+            else:
+                t += 1
+
 
 if __name__ == '__main__':
     G = graph.Graph('wiki.txt', sep='\t', typ=1)
