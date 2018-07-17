@@ -34,10 +34,10 @@ vecs_c = []
 
 all_idx = []
 for t in range(len(groups)):
-    print("%d / %d, n_vertices = %d..., accumul_vertex = %d "
-          % (t + 1, len(groups), len(groups[t]), len(all_idx)))
     if len(groups[t]) <= GROUP_IGNORE:
         continue
+    print("%d / %d, n_vertices = %d..., accumul_vertex = %d "
+          % (t + 1, len(groups), len(groups[t]), len(all_idx)))
     w, c = model.train(t, verbose=VERBOSE)
     vecs_w.append(w)
     vecs_c.append(c)
