@@ -46,7 +46,7 @@ def reservoir_deter(probs, k):
 
 
 def sample(net, k, method='deg'):
-    assert method in ('deg', 'deg^2')
+    assert method in ('deg', 'deg^2', 'deg_deter')
     rst = []
     if method == 'deg':
         probs = [len(v) for v in net.vertices]
