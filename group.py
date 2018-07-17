@@ -186,7 +186,7 @@ class Louvain:
             vertices += self.meta_nodes[meta_id].vertices
         return vertices
 
-    def first_stage(self):
+    def first_stage(self, rand=False):
         # whether there is ops in this function
         sign_increase = False
         visit_sequence = list(range(len(self.meta_nodes)))
@@ -194,7 +194,8 @@ class Louvain:
             # whether there is ops in this loop
             sign_loop_increase = False
             # shuffle the sequence
-            random.shuffle(visit_sequence)
+            if rand:
+                random.shuffle(visit_sequence)
             for meta_id_i in visit_sequence:
                 meta_node_i = self.meta_nodes[meta_id_i]
                 comm_id_i = meta_node_i.community  # current community of node i
@@ -288,11 +289,11 @@ class Louvain:
             groups.append(meta_node.vertices)
         return groups
 
-    def execute(self, max_iter=MAX_ITER):
+    def execute(self, max_iter=MAX_ITER, rand=False):
         ite = 0
         while ite < max_iter:
             ite += 1
-            sign_increase = self.first_stage()
+            sign_increase = self.first_stage(rand=rand)
             if sign_increase:
                 self.second_stage()
             else:

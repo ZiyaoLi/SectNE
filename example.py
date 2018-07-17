@@ -7,18 +7,23 @@ from numpy.linalg import norm
 
 K_SIZE = 200
 DIMENSION = 100
-VERBOSE = 1
+VERBOSE = 2
 GROUP_IGNORE = 1
+SAMPLE_METHOD = 'deg^2|group_prob'
+RANDOM_GROUPING = True
+
+MATRIX_TO_FILE = True
+FILE_NAME = 'wiki_200k_100d_l0.8_e0.1_theta1_prob.csv'
 
 net = Graph('wiki.txt', typ=1)
 grouping_model = Louvain(net)
-groups = grouping_model.execute()
+groups = grouping_model.execute(rand=RANDOM_GROUPING)
 group_sizes = [len(t) for t in groups]
 inv_index_original = groups2inv_index(groups, net.nVertices)
 sizes_index = [group_sizes[t - 1] for t in inv_index_original]
 
 # k_set = sample(net, k=K_SIZE, method='deg_deter')
-k_set = sample(net, k=K_SIZE, method='deg^2|group_prob', size_index=sizes_index)
+k_set = sample(net, k=K_SIZE, method=SAMPLE_METHOD, size_index=sizes_index)
 
 inv_index = groups2inv_index(groups, net.nVertices, k_set)
 pure_override_nodes(groups, inv_index)
@@ -29,8 +34,8 @@ vecs_c = []
 
 all_idx = []
 for t in range(len(groups)):
-    print("%d / %d, number of vertices = %d..."
-          % (t + 1, len(groups), len(groups[t])))
+    print("%d / %d, n_vertices = %d..., accumul_vertex = %d "
+          % (t + 1, len(groups), len(groups[t]), len(all_idx)))
     if len(groups[t]) <= GROUP_IGNORE:
         continue
     w, c = model.train(t, verbose=VERBOSE)
@@ -49,6 +54,8 @@ original = net.calc_matrix(all_idx, all_idx)
 # evaluate the reconstruction performance
 delta = original - reconstruct
 abs_delta = abs(delta)
+if MATRIX_TO_FILE:
+    np.savetxt(FILE_NAME, abs_delta, '%.6e', ',', '\n')
 t = norm(delta, 'fro')
 tt = norm(original, 'fro')
 print("Original - %.4f, delta - %.4f, percentage - %.4f"
