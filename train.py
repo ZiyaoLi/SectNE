@@ -15,7 +15,7 @@ from sample import sample
 THETA = 1
 LAMBDA = 0.8
 ETA = 0.1
-MAX_ITER = 200
+MAX_ITER = 100
 CG_MAX_ITER = 30
 EPSILON = 1e-4
 CG_EPSILON = 1e-4

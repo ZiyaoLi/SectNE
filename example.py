@@ -5,14 +5,14 @@ from group import Louvain, groups2inv_index, pure_override_nodes
 import numpy as np
 from numpy.linalg import norm
 
-K_SIZE = 200
+K_SIZE = 400
 DIMENSION = 100
 VERBOSE = 2
 GROUP_IGNORE = 1
 SAMPLE_METHOD = 'deg^2|group_prob'
 RANDOM_GROUPING = True
 
-MATRIX_TO_FILE = True
+MATRIX_TO_FILE = False
 FILE_NAME = 'wiki_200k_100d_l0.8_e0.1_theta1_prob.csv'
 
 net = Graph('wiki.txt', typ=1)
