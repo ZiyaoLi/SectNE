@@ -80,6 +80,9 @@ def sample(net, k, method='deg_prob', size_index=None):
         not_sep = (sizes > 1)
         probs = not_sep * degs / sizes
         rst = reservoir_deter(probs, k)
+    elif method == 'uniform':
+        probs = [1] * net.nVertices
+        rst = reservoir(probs, k)
     else:
         raise AssertionError
     return rst
