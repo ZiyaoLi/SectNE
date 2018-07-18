@@ -177,7 +177,7 @@ class Optimizer:
     #     return embeddings
 
 if __name__ == '__main__':
-    net = Graph('sample.txt', typ=1)
+    net = Graph('simple\\links.txt', typ=1)
     k_set = sample(net, k=3, method='deg^2_prob')
     sep = [[3, 4, 7], [1, 0, 6], [2, 8], [5, 9]]
     model = Optimizer(net, sep, dim=2)

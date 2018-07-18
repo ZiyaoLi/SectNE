@@ -89,7 +89,7 @@ def sample(net, k, method='deg_prob', size_index=None):
 
 
 if __name__ == '__main__':
-    g = Graph('graph.txt')
+    g = Graph('simple\\links.txt')
     # sample k nodes.
     idx_k = sample(g, 50)
     print(idx_k)
