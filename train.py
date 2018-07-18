@@ -10,108 +10,23 @@ import numpy as np
 from numpy.linalg import norm
 from graph import Graph
 from sample import sample
+from descend import *
 
-
+# hyper parameters
 THETA = 1
 LAMBDA = 0.8
 ETA = 0.1
 MAX_ITER = 100
-CG_MAX_ITER = 30
 EPSILON = 1e-4
-CG_EPSILON = 1e-4
+
+# dimensionality
 DIMENSION = 100
 K_SIZE = 200
+
+# vibration solution arguments
 N_HISTORY_MONITOR = 5
 THRESHOLD_MONITOR = 0.05
-PERCT_AVG = 0.55
-
-
-# def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
-#     '''
-#     Implemented from algorithm CG for SPD matrix linear equations,
-#     from XU, Shufang, et. Numerical Linear Algebra.
-#     :param x: initial value x0. Can be matrix of size (n x p) for a
-#               p-parallel CG.
-#     :param A: matrix in problem Ax = b.
-#     :param b: vector(matrix) in problem Ax = b. Notice that b \in R^(n x p).
-#     :param max_iter: max iterations
-#     :param eps: stop criterion
-#     :return: optimized x, algorithm state, residual squares
-#     '''
-#     b_norms = sum(b * b)
-#     criterion = eps * b_norms
-#     ite = 0
-#     r = b - A @ x
-#     rho = sum(r * r)
-#     while ite < max_iter and (rho > criterion).any():
-#         ite += 1
-#         if ite == 1:
-#             p = r
-#         else:
-#             beta = rho / rho_tilde
-#             p = r + beta * p
-#
-#         w = A @ p
-#         alpha = rho / sum(p * w)
-#         x = x + alpha * p
-#         r = r - alpha * w
-#         rho_tilde = rho
-#         rho = sum(r * r)
-#     return x, ite == max_iter, rho / b_norms
-
-
-# def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
-#     '''
-#     Implemented from algorithm CG for SPD matrix linear equations,
-#     from XU, Shufang, et. Numerical Linear Algebra.
-#     :param x: initial value x0. Can be matrix of size (n x p) for a
-#               p-parallel CG.
-#     :param A: matrix in problem Ax = b.
-#     :param b: vector(matrix) in problem Ax = b. Notice that b \in R^(n x p).
-#     :param max_iter: max iterations
-#     :param eps: stop criterion
-#     :return: optimized x, algorithm state, residual squares
-#     '''
-#     b_norms = sum(b * b)
-#     criterion = eps * b_norms
-#     ite = 0
-#     r = b - A @ x
-#     m = np.diag(A)
-#     rho_r = sum(r * r)
-#     while ite < max_iter and (rho_r > criterion).any():
-#         ite += 1
-#         z = (r.T / m).T
-#         if ite == 1:
-#             p = z
-#             rho = sum(r * z)
-#         else:
-#             rho_tilde = rho
-#             rho = sum(r * z)
-#             beta = rho / rho_tilde
-#             p = z + beta * p
-#
-#         w = A @ p
-#         alpha = rho / sum(p * w)
-#         x = x + alpha * p
-#         r = r - alpha * w
-#         rho_r = sum(r * r)
-#
-#     return x, ite == max_iter, rho_r / b_norms
-
-
-def conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
-    '''
-    Implemented from algorithm CG for SPD matrix linear equations,
-    from XU, Shufang, et. Numerical Linear Algebra.
-    :param x: initial value x0. Can be matrix of size (n x p) for a
-              p-parallel CG.
-    :param A: matrix in problem Ax = b.
-    :param b: vector(matrix) in problem Ax = b. Notice that b \in R^(n x p).
-    :param max_iter: max iterations
-    :param eps: stop criterion
-    :return: optimized x, algorithm state, residual squares
-    '''
-    return np.linalg.inv(A) @ b, False, np.zeros(b.shape[1])
+PERCENTAGE_AVG = 0.55
 
 
 class Optimizer:
@@ -119,7 +34,8 @@ class Optimizer:
                  dim=DIMENSION,
                  theta=THETA, lam=LAMBDA, eta=ETA,
                  max_iter=MAX_ITER, epsilon=EPSILON,
-                 cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON):
+                 cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON,
+                 descending_method=inverse_descending):
         self.graph = graph
         self.groups = groups
         self.nGroups = len(groups)
@@ -130,6 +46,7 @@ class Optimizer:
         self.eps = epsilon
         self.cg_max_iter = cg_max_iter
         self.cg_eps = cg_eps
+        self.descending_method = descending_method
 
         # fetch all matrix related to k at first to save time
         # in sequential embedding process.
@@ -208,22 +125,22 @@ class Optimizer:
             t_mb = self.m0_tilde @ B_prev
             G_A = G0_A + self.theta * (t_mb @ t_mb.T)
             b_A = b0_A + self.theta * (t_mb @ m_1_1.T)
-            A, state_A, res_A = conjugate_gradient(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
+            A, state_A, res_A = self.descending_method(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
             del t_mb, G_A, b_A
 
             # fix A update B
             t_ma = self.m0_tilde.T @ A_prev
             G_B = G0_B + self.theta * (t_ma @ t_ma.T)
             b_B = b0_B + self.theta * (t_ma @ m_1_1)
-            B, state_B, res_B = conjugate_gradient(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
+            B, state_B, res_B = self.descending_method(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
             del t_ma, G_B, b_B
 
             altered = (norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf)) / A.shape[1]
             hist_altered = hist_altered[1:] + [altered]
             improve_percentage = (np.mean(hist_altered) - altered) / altered
             if improve_percentage < THRESHOLD_MONITOR:
-                A = A * PERCT_AVG + A_prev * (1 - PERCT_AVG)
-                B = B * PERCT_AVG + B_prev * (1 - PERCT_AVG)
+                A = A * PERCENTAGE_AVG + A_prev * (1 - PERCENTAGE_AVG)
+                B = B * PERCENTAGE_AVG + B_prev * (1 - PERCENTAGE_AVG)
             A_prev = A
             B_prev = B
 
