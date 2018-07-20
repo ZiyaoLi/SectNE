@@ -65,13 +65,18 @@ class MetaNode:
 
 
 class Louvain:
-    def __init__(self, net):
+    def __init__(self, net, verbose=True):
         self.meta_nodes = []  # the current community_ids of vertices
         self.volume = net.nEdges
         self.communities = []
         self.n_communities = 0
+        n_metanodes = 0
         for vid in range(net.nVertices):
-            self.meta_nodes.append(MetaNode((vid, net.fetch_prox(vid))))
+            if verbose:
+                if not vid % 5e5:
+                    print('%d nodes read in Louvain...' % vid)
+            prox = net.fetch_prox(vid)
+            self.meta_nodes.append(MetaNode((vid, prox)))
 
     def add_to_community(self, meta_id, comm_id):
         '''
@@ -186,13 +191,15 @@ class Louvain:
             vertices += self.meta_nodes[meta_id].vertices
         return vertices
 
-    def first_stage(self, rand=False):
+    def first_stage(self, rand=False, verbose=True):
         # whether there is ops in this function
-        sign_increase = False
+        amount_increase = 0
         visit_sequence = list(range(len(self.meta_nodes)))
+        ite = 0
         while True:
+            ite += 1
             # whether there is ops in this loop
-            sign_loop_increase = False
+            amount_loop_increase = 0
             # shuffle the sequence
             if rand:
                 random.shuffle(visit_sequence)
@@ -234,8 +241,8 @@ class Louvain:
                     # some adjustments shall happen (for node i) under this condition
                     # otherwise, just go on looping
                     # first, modify the signs
-                    sign_loop_increase = True
-                    sign_increase = True
+                    amount_loop_increase += max_increase
+                    amount_increase += max_increase
                     # then, do appropriate adjustments
                     if max_increase_comm_id >= 0:
                         # found a current community to join
@@ -252,15 +259,19 @@ class Louvain:
                     new_comm_id = self.add_community()
                     self.add_to_community(meta_id_i, new_comm_id)
 
-            if not sign_loop_increase:
+            if verbose:
+                print('Looping %d of the first stage. increase=%.4f' % (ite, amount_loop_increase))
+
+            if not amount_loop_increase:
                 # indicates no ops in this iteration
                 break
 
-        return sign_increase
+        return amount_increase
 
     def second_stage(self):
         current_id = 0
         comm_id_mapping = {}
+        # construct a mapping that reduces empty communities
         for comm_id in range(self.n_communities):
             comm = self.communities[comm_id]
             if comm.degree == 0:
@@ -289,12 +300,15 @@ class Louvain:
             groups.append(meta_node.vertices)
         return groups
 
-    def execute(self, max_iter=MAX_ITER, rand=False):
+    def execute(self, max_iter=MAX_ITER, rand=False, verbose=True):
         ite = 0
         while ite < max_iter:
             ite += 1
-            sign_increase = self.first_stage(rand=rand)
-            if sign_increase:
+            amount_increase = self.first_stage(rand=rand)
+            if verbose:
+                print("%d iteration finished. first stage increase:%.4f"
+                      % (ite, amount_increase))
+            if amount_increase > 0:
                 self.second_stage()
             else:
                 break
