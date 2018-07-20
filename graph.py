@@ -138,8 +138,3 @@ class Graph:
                     print('%d vertices reduced...' % newVid)
         self.vertices = clean_vertices
         self.nVertices = len(clean_vertices)
-
-
-
-
-
