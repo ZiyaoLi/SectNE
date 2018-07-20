@@ -2,6 +2,9 @@ import numpy as np
 
 
 LAMBDA = 0.5
+VERBOSE = True
+N_EDGE_VERBOSE = 5e6
+N_VERTEX_VERBOSE = 5e5
 
 
 def inverse_index(idx):
@@ -32,7 +35,7 @@ class Vertex:
 
 class Graph:
 
-    def __init__(self, filename, sep='\t', typ='dir', verbose=True):
+    def __init__(self, filename, sep='\t', typ='dir', verbose=VERBOSE):
         self.vertices = []
         self.nVertices = 0
         self.nEdges = 0
@@ -45,13 +48,13 @@ class Graph:
             self.add_edge(vid_in, vid_out, typ)
             s = f.readline()
             if verbose:
-                if not self.nEdges % 5e6:
+                if not self.nEdges % N_EDGE_VERBOSE:
                     print('%d edges processed...' % self.nEdges)
         self.vid2newVid_mapping = {}
         self.newVid2vid_mapping = {}
         if verbose:
-            print('reducing empty indices...')
-        self.reduce()
+            print('Reducing empty vertices...')
+        self._reduce(verbose)
 
     def add_vertex(self, vid):
         if self.nVertices > vid:
@@ -131,7 +134,7 @@ class Graph:
             clean_vertices.append(new_vertex)
             self.nEdges += new_vertex.out_degree
             if verbose:
-                if not newVid % 1e5:
+                if not newVid % N_VERTEX_VERBOSE:
                     print('%d vertices reduced...' % newVid)
         self.vertices = clean_vertices
         self.nVertices = len(clean_vertices)
