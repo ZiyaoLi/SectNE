@@ -36,6 +36,7 @@ class Optimizer:
                  max_iter=MAX_ITER, epsilon=EPSILON,
                  cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON,
                  descending_method=inverse_descending):
+
         self.graph = graph
         self.groups = groups
         self.nGroups = len(groups)
@@ -47,6 +48,8 @@ class Optimizer:
         self.cg_max_iter = cg_max_iter
         self.cg_eps = cg_eps
         self.descending_method = descending_method
+        self.reverse_index = None
+        self.trained_embeddings = {}
 
         # fetch all matrix related to k at first to save time
         # in sequential embedding process.
@@ -166,15 +169,27 @@ class Optimizer:
 
         return w, c
         
-    # def get_embeddings(self):
-    #     embeddings = {}
-    #     for i, v in enumerate(self.groups[0]) :
-    #         embeddings[v] = self.wt[i].tolist()
-    #     print("{} Blocks in All".format(len(self.groups)))
-    #     for index in range(1, len(self.groups)) :
-    #         self.train(index, embeddings)
-    #         print("Block {} Finished!".format(index))
-    #     return embeddings
+    def _set_reverse_index(self):
+        self.reverse_index = {}
+        for group_idx, group in enumerate(self.groups):
+            for member_idx, member in enumerate(group):
+                self.reverse_index[member] = (group_idx, member_idx)
+
+    def embed(self, vertex_idx, verbose=1):
+        if isinstance(vertex_idx, list):
+            rst = []
+            for vid in vertex_idx:
+                rst.append(self.embed(vid, verbose=verbose))
+            return rst
+        if self.reverse_index is None:
+            self._set_reverse_index()
+        group_idx, member_idx = self.reverse_index[vertex_idx]
+        if vertex_idx not in self.trained_embeddings.keys():
+            w, c = self.train(group_idx, verbose=verbose)
+            for mid, vid in enumerate(self.groups[group_idx]):
+                self.trained_embeddings[vid] = w[:, mid]
+        return self.trained_embeddings[vertex_idx]
+
 
 if __name__ == '__main__':
     net = Graph('simple\\links.txt', typ=1)
@@ -200,10 +215,10 @@ if __name__ == '__main__':
     # evaluate the reconstruction performance
     delta = original - reconstruct
     abs_delta = abs(delta)
-    t = norm(delta, 'fro')
-    tt = norm(original, 'fro')
+    res_fnorm = norm(delta, 'fro')
+    ori_fnorm = norm(original, 'fro')
     print("Original - %.4f, delta - %.4f, percentage - %.4f"
-          % (tt, t, t / tt))
+          % (ori_fnorm, res_fnorm, res_fnorm / ori_fnorm))
 
     # a SVD implementation to exam how good is the result
     u, d, v = np.linalg.svd(original)
