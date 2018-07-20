@@ -10,16 +10,27 @@ import numpy as np
 
 
 def hkey(weight):
+    '''
+    weight -> hash_value function used in reservoir-sampling.
+    :param weight: given weight
+    :return: function value, return 0 for non-positive weights
+    '''
     assert weight >= 0
-    if weight == 0:
+    if weight <= 0:
         return 0
     else:
         return random.random() ** (1.0 / weight)
 
 
-def reservoir(probs, k):
+def reservoir(weights, k):
+    '''
+    using heap to implement reservoir-sampling.
+    :param weights: given weights
+    :param k: size of sampling
+    :return: sampled indices
+    '''
     heap = []
-    for idx, weight in enumerate(probs):
+    for idx, weight in enumerate(weights):
         if len(heap) < k:
             hq.heappush(heap, (idx, hkey(weight)))
         else:
@@ -32,9 +43,15 @@ def reservoir(probs, k):
     return rst
 
 
-def reservoir_deter(probs, k):
+def reservoir_deter(weights, k):
+    '''
+    using heap to implement finding k-max of a list.
+    :param weights: given weights
+    :param k: k for k-max
+    :return: k-max indices
+    '''
     heap = []
-    for idx, weight in enumerate(probs):
+    for idx, weight in enumerate(weights):
         if len(heap) < k:
             hq.heappush(heap, (idx, weight))
         else:
@@ -46,7 +63,15 @@ def reservoir_deter(probs, k):
     return rst
 
 
-def sample(net, k, method='deg_prob', size_index=None):
+def sample(net, k, method='deg_prob', vertex_group_sizes=None):
+    '''
+    sampling k vertices with a given graph by a given method.
+    :param net: Graph object
+    :param k: sampling size
+    :param method: method to sample
+    :param vertex_group_sizes: a list of the group sizes of which the vertices are.
+    :return: a list of sampled indices
+    '''
     if method == 'deg_prob':
         probs = [len(v) for v in net.vertices]
         rst = reservoir(probs, k)
@@ -57,28 +82,28 @@ def sample(net, k, method='deg_prob', size_index=None):
         probs = [len(v) for v in net.vertices]
         rst = reservoir_deter(probs, k)
     elif method == 'deg|group_prob':
-        degs = np.array([len(v) for v in net.vertices])
-        sizes = np.array(size_index)
-        not_sep = (sizes > 1)
-        probs = not_sep * degs / sizes
+        degrees = np.array([len(v) for v in net.vertices])
+        group_sizes = np.array(vertex_group_sizes)
+        not_sep = (group_sizes > 1)
+        probs = not_sep * degrees / group_sizes
         rst = reservoir(probs, k)
     elif method == 'deg^2|group_prob':
-        degs = np.array([len(v) ** 2 for v in net.vertices])
-        sizes = np.array(size_index)
-        not_sep = (sizes > 1)
-        probs = not_sep * degs / sizes
+        degrees = np.array([len(v) ** 2 for v in net.vertices])
+        group_sizes = np.array(vertex_group_sizes)
+        not_sep = (group_sizes > 1)
+        probs = not_sep * degrees / group_sizes
         rst = reservoir(probs, k)
     elif method == 'deg|group_deter':
-        degs = np.array([len(v) for v in net.vertices])
-        sizes = np.array(size_index)
-        not_sep = (sizes > 1)
-        probs = not_sep * degs / sizes
+        degrees = np.array([len(v) for v in net.vertices])
+        group_sizes = np.array(vertex_group_sizes)
+        not_sep = (group_sizes > 1)
+        probs = not_sep * degrees / group_sizes
         rst = reservoir_deter(probs, k)
     elif method == 'deg^2|group_deter':
-        degs = np.array([len(v) ** 2 for v in net.vertices])
-        sizes = np.array(size_index)
-        not_sep = (sizes > 1)
-        probs = not_sep * degs / sizes
+        degrees = np.array([len(v) ** 2 for v in net.vertices])
+        group_sizes = np.array(vertex_group_sizes)
+        not_sep = (group_sizes > 1)
+        probs = not_sep * degrees / group_sizes
         rst = reservoir_deter(probs, k)
     elif method == 'uniform':
         probs = [1] * net.nVertices
@@ -89,7 +114,7 @@ def sample(net, k, method='deg_prob', size_index=None):
 
 
 if __name__ == '__main__':
-    g = Graph('simple\\links.txt')
+    g = Graph('wiki\\links.txt')
     # sample k nodes.
     idx_k = sample(g, 50)
     print(idx_k)
