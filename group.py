@@ -1,5 +1,6 @@
 import graph
 import random
+import pandas as pd
 import numpy as np
 
 # Louvain Algorithm
@@ -13,31 +14,54 @@ class Community:
         self.id = comm_id
         self.children = set()
         self.out_reaches = {}
-        self.degree = 0
+        self.in_reaches = {}
+        self.out_degree = 0
+        self.in_degree = 0
 
-    def to_metanode(self, proximity, vertices):
-        return MetaNode((self, proximity, vertices))
+    def to_metanode(self, in_prox, out_prox, vertices):
+        return MetaNode((self, in_prox, out_prox, vertices))
 
-    def get_inject(self, meta_id_other):
-        try:
-            return self.out_reaches[meta_id_other]
-        except KeyError:
-            return 0
-
-    def add_inject(self, meta_id_other, amount):
-        try:
-            self.out_reaches[meta_id_other] += amount
-        except KeyError:
-            self.out_reaches[meta_id_other] = amount
-        self.degree += amount
-
-    def reduce_inject(self, meta_id_other, amount):
-        t = self.out_reaches[meta_id_other] - amount
-        if t == 0:
-            self.out_reaches.pop(meta_id_other)
+    def get_inject(self, meta_id_other, typ):
+        if typ == 'to':
+            try:
+                return self.out_reaches[meta_id_other]
+            except KeyError:
+                return 0
         else:
-            self.out_reaches[meta_id_other] = t
-        self.degree -= amount
+            try:
+                return self.in_reaches[meta_id_other]
+            except KeyError:
+                return 0
+
+    def add_inject(self, meta_id_other, amount, typ):
+        if typ == 'to':
+            try:
+                self.out_reaches[meta_id_other] += amount
+            except KeyError:
+                self.out_reaches[meta_id_other] = amount
+            self.out_degree += amount
+        else:
+            try:
+                self.in_reaches[meta_id_other] += amount
+            except KeyError:
+                self.in_reaches[meta_id_other] = amount
+            self.in_degree += amount
+
+    def reduce_inject(self, meta_id_other, amount, typ):
+        if typ == 'to':
+            t = self.out_reaches[meta_id_other] - amount
+            if t == 0:
+                self.out_reaches.pop(meta_id_other)
+            else:
+                self.out_reaches[meta_id_other] = t
+            self.out_degree -= amount
+        else:
+            t = self.in_reaches[meta_id_other] - amount
+            if t == 0:
+                self.in_reaches.pop(meta_id_other)
+            else:
+                self.in_reaches[meta_id_other] = t
+            self.in_degree -= amount
 
 
 class MetaNode:
@@ -45,23 +69,33 @@ class MetaNode:
         if isinstance(param[0], Community):
             # initialize from a lower-level community
             self.id = param[0].id
-            self.vertices = param[2]
+            self.vertices = param[3]
             self.community = None
-            self.degree = param[0].degree
-            self.prox = param[1]
-        else:
+            self.in_degree = param[0].in_degree
+            self.out_degree = param[0].out_degree
+            self.in_prox = param[1]
+            self.out_prox = param[2]
+        elif isinstance(param[0], int):
             # initialize from an individual vertex
             self.id = param[0]
             self.vertices = [param[0]]
             self.community = None
-            self.degree = len(param[1])
-            self.prox = dict([(t, 1) for t in param[1]])
+            self.in_degree = param[1].in_degree
+            self.out_degree = param[1].out_degree
+            self.in_prox = dict([(t, 1) for t in param[1].in_prox])
+            self.out_prox = dict([(t, 1) for t in param[1].out_prox])
 
-    def get_prox(self, meta_id_other):
-        try:
-            return self.prox[meta_id_other]
-        except KeyError:
-            return 0
+    def get_prox(self, meta_id_other, typ):
+        if typ == 'to':
+            try:
+                return self.out_prox[meta_id_other]
+            except KeyError:
+                return 0
+        else:
+            try:
+                return self.in_prox[meta_id_other]
+            except KeyError:
+                return 0
 
 
 class Louvain:
@@ -70,13 +104,12 @@ class Louvain:
         self.volume = net.nEdges
         self.communities = []
         self.n_communities = 0
-        n_metanodes = 0
         for vid in range(net.nVertices):
             if verbose:
                 if not vid % 5e5:
                     print('%d nodes read in Louvain...' % vid)
-            prox = net.fetch_prox(vid)
-            self.meta_nodes.append(MetaNode((vid, prox)))
+            vertex = net.vertices[vid]
+            self.meta_nodes.append(MetaNode((vid, vertex)))
 
     def add_to_community(self, meta_id, comm_id):
         '''
@@ -92,8 +125,10 @@ class Louvain:
         meta_node.community = comm_id
         comm.children.add(meta_id)
         # adding injections
-        for out_id, out_degree in meta_node.prox.items():
-            comm.add_inject(out_id, out_degree)
+        for out_id, out_degree in meta_node.out_prox.items():
+            comm.add_inject(out_id, out_degree, 'to')
+        for in_id, in_degree in meta_node.in_prox.items():
+            comm.add_inject(in_id, in_degree, 'from')
 
     def remove_from_community(self, meta_id):
         '''
@@ -102,15 +137,17 @@ class Louvain:
         :return: None
         '''
         meta_node = self.meta_nodes[meta_id]
-        assert meta_node.community is not None
         comm_id = meta_node.community
+        assert comm_id is not None
         comm = self.communities[comm_id]
         # discarding parent-child relationship
         meta_node.community = None
         comm.children.remove(meta_id)
-        # re-calculating parent's proximity
-        for out_id, out_degree in meta_node.prox.items():
-            comm.reduce_inject(out_id, out_degree)
+        # reducing injections
+        for out_id, out_degree in meta_node.out_prox.items():
+            comm.reduce_inject(out_id, out_degree, 'to')
+        for in_id, in_degree in meta_node.in_prox.items():
+            comm.reduce_inject(in_id, in_degree, 'from')
 
     def adjust_community(self, meta_id, comm_id):
         '''
@@ -141,8 +178,9 @@ class Louvain:
         rst = 0
         if comm_id is not None:
             comm = self.communities[comm_id]
-            rst += 2 * (comm.get_inject(meta_id) - meta_node.get_prox(meta_id))
-            rst -= meta_node.degree * (comm.degree - meta_node.degree) / self.volume
+            rst += (comm.get_inject(meta_id, 'to') - meta_node.get_prox(meta_id, 'to')) + \
+                   (comm.get_inject(meta_id, 'from') - meta_node.get_prox(meta_id, 'from'))
+            rst -= meta_node.out_degree * (comm.out_degree - meta_node.out_degree) / self.volume
         return rst
 
     def gain_modularity(self, meta_id, comm_id):
@@ -157,15 +195,16 @@ class Louvain:
         '''
         meta_node = self.meta_nodes[meta_id]
         comm = self.communities[comm_id]
-        rst = 2 * comm.get_inject(meta_id)
-        rst -= meta_node.degree * comm.degree / self.volume
+        rst = comm.get_inject(meta_id, 'to') + comm.get_inject(meta_id, 'from')
+        rst -= meta_node.out_degree * comm.out_degree / self.volume
         return rst
 
     def form_modularity(self, meta_id_i, meta_id_j):
         meta_node_i = self.meta_nodes[meta_id_i]
         meta_node_j = self.meta_nodes[meta_id_j]
-        return 2 * meta_node_i.get_prox(meta_id_j) - \
-            meta_node_i.degree * meta_node_j.degree / self.volume
+        return meta_node_i.get_prox(meta_id_j, 'to') + \
+            meta_node_i.get_prox(meta_id_j, 'from') - \
+            meta_node_i.out_degree * meta_node_j.out_degree / self.volume
 
     def add_community(self):
         t = self.n_communities
@@ -175,14 +214,21 @@ class Louvain:
 
     def proximity_between_community(self, comm_id, reduce_mapping):
         comm = self.communities[comm_id]
-        proximity = {}
+        in_prox = {}
+        out_prox = {}
         for meta_id, weight in comm.out_reaches.items():
             comm_id_to = reduce_mapping[self.meta_nodes[meta_id].community]
             try:
-                proximity[comm_id_to] += weight
+                out_prox[comm_id_to] += weight
             except KeyError:
-                proximity[comm_id_to] = weight
-        return proximity
+                out_prox[comm_id_to] = weight
+        for meta_id, weight in comm.in_reaches.items():
+            comm_id_from = reduce_mapping[self.meta_nodes[meta_id].community]
+            try:
+                in_prox[comm_id_from] += weight
+            except KeyError:
+                in_prox[comm_id_from] = weight
+        return in_prox, out_prox
 
     def vertices_union(self, comm_id):
         comm = self.communities[comm_id]
@@ -200,8 +246,8 @@ class Louvain:
             ite += 1
             # whether there is ops in this loop
             amount_loop_increase = 0
-            # shuffle the sequence
             if rand:
+                # shuffle the sequence
                 random.shuffle(visit_sequence)
             for meta_id_i in visit_sequence:
                 meta_node_i = self.meta_nodes[meta_id_i]
@@ -214,8 +260,11 @@ class Louvain:
                 max_increase_comm_id = -1
                 max_increase_meta_id = -1
 
-                for meta_id_j in meta_node_i.prox.keys():
+                meta_candidates = set(meta_node_i.in_prox.keys()).\
+                    union(set(meta_node_i.out_prox.keys()))
+                for meta_id_j in meta_candidates:
                     if meta_id_j == meta_id_i:
+                        # self-adjustment forbidden
                         continue
                     # iterate through i node's neighbors to find a new community to join
                     meta_node_j = self.meta_nodes[meta_id_j]
@@ -274,7 +323,7 @@ class Louvain:
         # construct a mapping that reduces empty communities
         for comm_id in range(self.n_communities):
             comm = self.communities[comm_id]
-            if comm.degree == 0:
+            if len(comm.children) == 0:
                 continue
             else:
                 comm.id = current_id
@@ -284,12 +333,12 @@ class Louvain:
         meta_nodes = []
         for comm_id in range(self.n_communities):
             comm = self.communities[comm_id]
-            if comm.degree == 0:
+            if len(comm.children) == 0:
                 continue
             else:
-                proximity = self.proximity_between_community(comm_id, comm_id_mapping)
+                in_prox, out_prox = self.proximity_between_community(comm_id, comm_id_mapping)
                 vertices_union = self.vertices_union(comm_id)
-                meta_nodes.append(comm.to_metanode(proximity, vertices_union))
+                meta_nodes.append(comm.to_metanode(in_prox, out_prox, vertices_union))
         self.meta_nodes = meta_nodes
         self.communities = []
         self.n_communities = 0
@@ -339,8 +388,10 @@ def pure_override_nodes(groups, inv_index):
 
 
 if __name__ == '__main__':
-    G = graph.Graph('wiki.txt', sep='\t', typ=1)
+    G = graph.Graph('data\\wiki\\links.txt', sep='\t', typ=1)
     algorithm = Louvain(G)
     communities = algorithm.execute()
     for c in communities:
         print(c)
+    print("--------------------")
+    print(pd.value_counts([len(t) for t in communities]))

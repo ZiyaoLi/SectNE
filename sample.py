@@ -1,6 +1,5 @@
 import random
 import heapq as hq
-from graph import Graph
 import numpy as np
 
 
@@ -73,34 +72,34 @@ def sample(net, k, method='deg_prob', vertex_group_sizes=None):
     :return: a list of sampled indices
     '''
     if method == 'deg_prob':
-        probs = [len(v) for v in net.vertices]
+        probs = [v.weight() for v in net.vertices]
         rst = reservoir(probs, k)
     elif method == 'deg^2_prob':
-        probs = [len(v) ** 2 for v in net.vertices]
+        probs = [v.weight() ** 2 for v in net.vertices]
         rst = reservoir(probs, k)
     elif method == 'deg_deter':
-        probs = [len(v) for v in net.vertices]
+        probs = [v.weight() for v in net.vertices]
         rst = reservoir_deter(probs, k)
     elif method == 'deg|group_prob':
-        degrees = np.array([len(v) for v in net.vertices])
+        degrees = np.array([v.weight() for v in net.vertices])
         group_sizes = np.array(vertex_group_sizes)
         not_sep = (group_sizes > 1)
         probs = not_sep * degrees / group_sizes
         rst = reservoir(probs, k)
     elif method == 'deg^2|group_prob':
-        degrees = np.array([len(v) ** 2 for v in net.vertices])
+        degrees = np.array([v.weight() ** 2 for v in net.vertices])
         group_sizes = np.array(vertex_group_sizes)
         not_sep = (group_sizes > 1)
         probs = not_sep * degrees / group_sizes
         rst = reservoir(probs, k)
     elif method == 'deg|group_deter':
-        degrees = np.array([len(v) for v in net.vertices])
+        degrees = np.array([v.weight() for v in net.vertices])
         group_sizes = np.array(vertex_group_sizes)
         not_sep = (group_sizes > 1)
         probs = not_sep * degrees / group_sizes
         rst = reservoir_deter(probs, k)
     elif method == 'deg^2|group_deter':
-        degrees = np.array([len(v) ** 2 for v in net.vertices])
+        degrees = np.array([v.weight() ** 2 for v in net.vertices])
         group_sizes = np.array(vertex_group_sizes)
         not_sep = (group_sizes > 1)
         probs = not_sep * degrees / group_sizes
@@ -114,6 +113,7 @@ def sample(net, k, method='deg_prob', vertex_group_sizes=None):
 
 
 if __name__ == '__main__':
+    from graph import Graph
     g = Graph('wiki\\links.txt')
     # sample k nodes.
     idx_k = sample(g, 50)

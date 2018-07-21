@@ -6,7 +6,6 @@
 #     sum(A * B) gives the vector
 #             (<a1, b1>, <a2, b2>, ..., <an, bn>).
 
-import numpy as np
 from numpy.linalg import norm
 from graph import Graph
 from sample import sample
@@ -14,9 +13,9 @@ from descend import *
 
 # hyper parameters
 THETA = 1
-LAMBDA = 0.8
+LAMBDA = 1
 ETA = 0.1
-MAX_ITER = 100
+MAX_ITER = 200
 EPSILON = 1e-4
 
 # dimensionality
@@ -24,9 +23,11 @@ DIMENSION = 100
 K_SIZE = 200
 
 # vibration solution arguments
-N_HISTORY_MONITOR = 5
-THRESHOLD_MONITOR = 0.05
+N_HISTORY_MONITOR = 3
+THRESHOLD_MONITOR = 0.1
 PERCENTAGE_AVG = 0.55
+
+VERBOSE = 1
 
 
 class Optimizer:
@@ -39,20 +40,15 @@ class Optimizer:
 
         self.graph = graph
         self.groups = groups
-        self.nGroups = len(groups)
-        self.lam = lam
-        self.eta = eta
-        self.theta = theta
-        self.max_iter = max_iter
-        self.eps = epsilon
-        self.cg_max_iter = cg_max_iter
-        self.cg_eps = cg_eps
+        self.lam, self.eta, self.theta = lam, eta, theta
+        self.max_iter, self.eps = max_iter, epsilon
+        self.cg_max_iter, self.cg_eps = cg_max_iter, cg_eps
         self.descending_method = descending_method
-        self.reverse_index = None
+        self.inverse_index = None
         self.trained_embeddings = {}
 
-        # fetch all matrix related to k at first to save time
-        # in sequential embedding process.
+        # fetch the matrix related to k at initialization in order to
+        # save time in following sequential embedding process.
         self.m_0_all = self.graph.calc_matrix(groups[0], list(range(graph.nVertices)))
         self.m_all_0 = self.graph.calc_matrix(list(range(graph.nVertices)), groups[0])
 
@@ -62,19 +58,22 @@ class Optimizer:
         self.phi = (u[:, :dim] * np.sqrt(d[:dim])).T
         self.psi = (v.T[:, :dim] * np.sqrt(d[:dim])).T
         self.m0_tilde = self.phi.T @ self.psi
+        self.m0_m0T = self.m0_tilde @ self.m0_tilde.T
+        self.m0T_m0 = self.m0_tilde.T @ self.m0_tilde
 
     def _get_rest_idx(self, group_idx):
-        ib = []
+        rst = []
         for i in range(1, len(self.groups)):
             if i == group_idx:
                 continue
-            ib += self.groups[i]
-        return ib
+            rst += self.groups[i]
+        return rst
 
-    def train(self, group_idx, verbose=1):
+    def train(self, group_idx, verbose=VERBOSE):
 
-        assert group_idx < self.nGroups
+        assert group_idx < len(self.groups)
         if group_idx == 0:
+            # asking for k vertices
             return self.phi, self.psi
 
         indices = self.groups[group_idx]
@@ -83,31 +82,28 @@ class Optimizer:
         # pre-calculate the matrices and intercepts to be used
         # to minimize the efforts in the loop.
 
-        # 1.t_mm: \tilde{m_0} * \tilde{m_0}^T
-        t_mm = self.m0_tilde @ self.m0_tilde.T
-
-        # 2. pre-calculate constants for A
+        # 1. pre-calculate constants for A
         m_1_0 = self.m_all_0[indices, :]
         m_0_r = self.m_0_all[:, rest_indices]
         m_1_r = self.graph.calc_matrix(self.groups[group_idx], rest_indices)
         # G_A = G0_A + G(B), b_A = b0_A + b(B),
         # where G(B) and b(B) are the B-related additive factors.
-        G0_A = t_mm + self.lam * (m_0_r @ m_0_r.T) + self.eta * np.eye(len(t_mm))
+        G0_A = self.m0_m0T + self.lam * (m_0_r @ m_0_r.T) + self.eta * np.eye(len(self.m0_m0T))
         b0_A = self.m0_tilde @ m_1_0.T + self.lam * (m_0_r @ m_1_r.T)
         # delete useless variables in time.
-        del m_1_r
+        del m_1_0, m_0_r, m_1_r
 
-        # 3. duel process for B
+        # 2. similar process for B
         m_0_1 = self.m_0_all[:, indices]
         m_r_0 = self.m_all_0[rest_indices, :]
         m_r_1 = self.graph.calc_matrix(rest_indices, self.groups[group_idx])
-        G0_B = t_mm.T + self.lam * (m_r_0.T @ m_r_0) + self.eta * np.eye(len(t_mm))
+        G0_B = self.m0T_m0 + self.lam * (m_r_0.T @ m_r_0) + self.eta * np.eye(len(self.m0_m0T))
         b0_B = self.m0_tilde.T @ m_0_1 + self.lam * (m_r_0.T @ m_r_1)
-        del m_r_1
+        del m_0_1, m_r_0, m_r_1
 
-        del t_mm, rest_indices
+        del rest_indices
 
-        # 4. m_1_1
+        # 3. m_1_1: the among-group information
         m_1_1 = self.graph.calc_matrix(self.groups[group_idx], self.groups[group_idx])
 
         # init
@@ -120,18 +116,18 @@ class Optimizer:
         # A_prev = np.zeros((n_0, n_1))
         # B_prev = np.zeros((n_0, n_1))
         ite = 0
-        altered = np.inf  # initial 'altered' doesn't stop the loop
+        altered = np.inf  # so that initial 'altered' doesn't stop the loop
         hist_altered = [np.inf] * N_HISTORY_MONITOR
         while ite < self.max_iter and altered > self.eps:
             ite += 1
-            # fix B update A
+            # fixing B updating A
             t_mb = self.m0_tilde @ B_prev
             G_A = G0_A + self.theta * (t_mb @ t_mb.T)
             b_A = b0_A + self.theta * (t_mb @ m_1_1.T)
             A, state_A, res_A = self.descending_method(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
             del t_mb, G_A, b_A
 
-            # fix A update B
+            # fixing A updating B
             t_ma = self.m0_tilde.T @ A_prev
             G_B = G0_B + self.theta * (t_ma @ t_ma.T)
             b_B = b0_B + self.theta * (t_ma @ m_1_1)
@@ -159,31 +155,33 @@ class Optimizer:
         c = self.psi @ B
 
         # debug info
-        # original = net.calc_matrix(self.groups[0] + self.groups[group_idx],
-        #                            self.groups[0] + self.groups[group_idx])
-        # reconstruct = np.concatenate([self.phi, w], 1).T @ \
-        #               np.concatenate([self.psi, c], 1)
-        # delta = abs(original - reconstruct)
-        #
-        # t = norm(delta)
+        original = self.graph.calc_matrix(self.groups[0] + self.groups[group_idx],
+                                          self.groups[0] + self.groups[group_idx])
+        reconstruct = np.concatenate([self.phi, w], 1).T @ \
+                      np.concatenate([self.psi, c], 1)
+        delta = abs(original - reconstruct)
+
+        t = norm(delta)
 
         return w, c
-        
-    def _set_reverse_index(self):
-        self.reverse_index = {}
+
+    def _set_inverse_index(self):
+        self.inverse_index = [-1] * self.graph.nVertices
         for group_idx, group in enumerate(self.groups):
             for member_idx, member in enumerate(group):
-                self.reverse_index[member] = (group_idx, member_idx)
+                self.inverse_index[member] = (group_idx, member_idx)
 
-    def embed(self, vertex_idx, verbose=1):
+    def embed(self, vertex_idx, verbose=VERBOSE):
         if isinstance(vertex_idx, list):
+            # if input is a list of targets, do it one by one.
             rst = []
             for vid in vertex_idx:
                 rst.append(self.embed(vid, verbose=verbose))
             return rst
-        if self.reverse_index is None:
-            self._set_reverse_index()
-        group_idx, member_idx = self.reverse_index[vertex_idx]
+        if self.inverse_index is None:
+            # set an inverse index: vid -> (group_id, member_id)
+            self._set_inverse_index()
+        group_idx, member_idx = self.inverse_index[vertex_idx]
         if vertex_idx not in self.trained_embeddings.keys():
             w, c = self.train(group_idx, verbose=verbose)
             for mid, vid in enumerate(self.groups[group_idx]):
@@ -192,7 +190,7 @@ class Optimizer:
 
 
 if __name__ == '__main__':
-    net = Graph('simple\\links.txt', typ=1)
+    net = Graph('data\\simple\\links.txt', typ=1)
     k_set = sample(net, k=3, method='deg^2_prob')
     sep = [[3, 4, 7], [1, 0, 6], [2, 8], [5, 9]]
     model = Optimizer(net, sep, dim=2)
@@ -228,7 +226,7 @@ if __name__ == '__main__':
     delta_svd = original - reconstruct_svd
     t_svd = norm(delta_svd, 'fro')
     print("Original - %.4f, delta - %.4f, percentage - %.4f"
-          % (tt, t_svd, t_svd / tt))
+          % (ori_fnorm, t_svd, t_svd / ori_fnorm))
 
 
 

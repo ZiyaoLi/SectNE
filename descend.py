@@ -92,8 +92,8 @@ def inverse_descending(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
               p-parallel CG.
     :param A: matrix in problem Ax = b.
     :param b: vector(matrix) in problem Ax = b. Notice that b \in R^(n x p).
-    :param max_iter: max iterations
-    :param eps: stop criterion
+    :param max_iter: max iterations (keeping place)
+    :param eps: stop criterion (keeping place)
     :return: optimized x, algorithm state, residual squares
     '''
     return np.linalg.inv(A) @ b, False, np.zeros(b.shape[1])

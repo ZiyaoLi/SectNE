@@ -13,6 +13,7 @@ from sklearn.utils import shuffle as skshuffle
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn import preprocessing
 
+
 class TopKRanker(OneVsRestClassifier):
     def predict(self, X, top_k_list):
         assert X.shape[0] == len(top_k_list)
@@ -24,16 +25,16 @@ class TopKRanker(OneVsRestClassifier):
             all_labels.append(labels)
         return all_labels
 
-def score (embeddings, group, V) :
+
+def score(embeddings, group, V):
     # Load labels
-    label = [group[i] for i in V] #
+    label = [group[i] for i in V]
     labels_matrix = sparse.csc_matrix((numpy.ones_like(label),(V,label))) #
-    labels_count = labels_matrix.shape[1] #
-    mlb = MultiLabelBinarizer(range(labels_count)) #
+    labels_count = labels_matrix.shape[1]
+    mlb = MultiLabelBinarizer(range(labels_count))
 
     # Load Embeddings
     features_matrix = numpy.asarray([embeddings[i] for i in V]) #
-    #features_matrix = preprocessing.normalize(features_matrix)
 
     # Shuffle, to create train/test groups
     shuffles = []
@@ -43,9 +44,8 @@ def score (embeddings, group, V) :
     # to score each train/test group
     all_results = defaultdict(list)
 
-    #training_percents = numpy.asarray(range(1, 10)) * .1
-    training_percents = numpy.asarray(range(5,6)) * .1
-
+    # training_percents = numpy.asarray(range(1, 10)) * .1
+    training_percents = numpy.asarray(range(5, 6)) * .1
 
     for train_percent in training_percents:
         for shuf in shuffles:
