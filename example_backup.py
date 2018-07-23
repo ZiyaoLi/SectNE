@@ -8,16 +8,16 @@ import train
 from numpy.linalg import norm
 import time
 
-K_SIZE = 1000
+K_SIZE = 200
 DIMENSION = 100
 VERBOSE = 1
 GROUP_IGNORE = 1
 SAMPLE_METHOD = 'deg_deter'
-RANDOM_GROUPING = True
+RANDOM_GROUPING = False
 
 DATASET = 'wiki'
 DATADIR = 'data\\'
-ABS_DELTA_MATRIX_TO_FILE = True
+ABS_DELTA_MATRIX_TO_FILE = False
 UNIQUE_NAME = 'cleared-null-entries'
 METHOD_MAP = {
     'deg_prob': 'dp',
@@ -39,6 +39,8 @@ FILE_NAME = 'results\\' + '_'.join([
     'max-iter=%04d' % train.MAX_ITER,
     '%s%.3f' % (UNIQUE_NAME, np.random.rand())
 ]) + '.csv'
+
+pt0 = time.time()
 
 pt = time.time()
 net = Graph(DATADIR + DATASET + '\\links.txt', typ='dir')
@@ -70,6 +72,7 @@ print('INITIAL OPTIMIZER TIME (SVD): %.2f' % (time.time() - pt))
 vecs_w = []
 vecs_c = []
 
+ppt = time.time()
 all_idx = []
 for t in range(len(groups)):
     pt = time.time()
@@ -82,6 +85,10 @@ for t in range(len(groups)):
     vecs_w.append(w)
     vecs_c.append(c)
     all_idx += groups[t]
+print('ALL GROUPS TRAINING TIME: %.2f' % (time.time() - ppt))
+
+print('TOTAL TIME: %.2f' % (time.time() - pt0))
+
 
 # concatenate all the derived vectors together
 ws = np.concatenate(vecs_w, 1)

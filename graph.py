@@ -1,6 +1,7 @@
 import numpy as np
 from sparse_matrix import SparseMatrix
-
+from collections import defaultdict as ddict
+from scipy import sparse as sp
 
 LAMBDA = 1
 VERBOSE = True
@@ -102,38 +103,58 @@ class Graph:
         else:
             return self.vertices[vid].in_prox
 
-    def calc_matrix_sparse(self, idx_in, idx_out, verbose=VERBOSE):
-        if len(idx_in) <= len(idx_out):
-            mat = SparseMatrix(len(idx_in), len(idx_out), 0)
-            vid2colid_map = inverse_index(idx_out, self.nVertices, 'list')
-            for row_id, vid in enumerate(idx_in):
+    def calc_matrix_sparse(self, idx_row, idx_col, style=0, verbose=VERBOSE):
+        if style == -1:
+            return self.calc_matrix_sparse(idx_row, idx_col, 0), \
+                   self.calc_matrix_sparse(idx_row, idx_col, 1)
+        data = []
+        indices = []
+        current_ptr = 0
+        indptr = [current_ptr]
+        if style == 0:
+            vid2colid_map = inverse_index(idx_col, self.nVertices, 'list')
+            for row_id, vid in enumerate(idx_row):
+                row = ddict(int)
                 for first_neighbor in self.fetch_prox(vid, 'out'):
                     col_id_1 = vid2colid_map[first_neighbor]
                     if col_id_1 > 0:
-                        mat.add_to_entry(row_id, col_id_1, 1 / self.vertices[vid].out_degree)
+                        row[col_id_1] += 1 / self.vertices[vid].out_degree
                     for second_neighbor in self.fetch_prox(first_neighbor, 'out'):
                         col_id_2 = vid2colid_map[second_neighbor]
                         if col_id_2 > 0:
-                            mat.add_to_entry(row_id, col_id_2, LAMBDA / (
+                            row[col_id_2] += LAMBDA / (
                                 self.vertices[vid].out_degree *
                                 self.vertices[first_neighbor].out_degree
-                            ))
-        else:
-            mat = SparseMatrix(len(idx_in), len(idx_out), 1)
-            vid2rowid_map = inverse_index(idx_in, self.nVertices, 'list')
-            for col_id, vid in enumerate(idx_out):
+                            )
+                data.extend(list(row.values()))
+                indices.extend(list(row.keys()))
+                current_ptr += len(row)
+                indptr.append(current_ptr)
+            return sp.csr_matrix((data, indices, indptr),
+                                 shape=(len(idx_row), len(idx_col)))
+        elif style == 1:
+            vid2rowid_map = inverse_index(idx_row, self.nVertices, 'list')
+            for col_id, vid in enumerate(idx_col):
+                col = ddict(int)
                 for first_neighbor in self.fetch_prox(vid, 'in'):
                     row_id_1 = vid2rowid_map[first_neighbor]
                     if row_id_1 > 0:
-                        mat.add_to_entry(col_id, row_id_1, 1 / self.vertices[first_neighbor].out_degree)
+                        col[row_id_1] += 1 / self.vertices[first_neighbor].out_degree
                     for second_neighbor in self.fetch_prox(first_neighbor, 'in'):
                         row_id_2 = vid2rowid_map[second_neighbor]
                         if row_id_2 > 0:
-                            mat.add_to_entry(col_id, row_id_2, LAMBDA / (
+                            col[row_id_2] += LAMBDA / (
                                 self.vertices[second_neighbor].out_degree *
                                 self.vertices[first_neighbor].out_degree
-                            ))
-        return mat
+                            )
+                data.extend(list(col.values()))
+                indices.extend(list(col.keys()))
+                current_ptr += len(col)
+                indptr.append(current_ptr)
+            return sp.csc_matrix((data, indices, indptr),
+                                 shape=(len(idx_row), len(idx_col)))
+        else:
+            assert False, 'invalid style type provided.'
 
     def calc_matrix(self, idx_in, idx_out, verbose=VERBOSE):
         mat = np.zeros([len(idx_in), len(idx_out)])

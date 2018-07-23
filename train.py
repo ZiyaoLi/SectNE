@@ -12,6 +12,7 @@ from sample import sample
 from descend import *
 from sparse_matrix import *
 import time
+from scipy import sparse as sp
 
 # hyper parameters
 THETA = 1
@@ -44,6 +45,7 @@ class Optimizer:
                  verbose=VERBOSE):
 
         self.graph = graph
+        self.k_size = len(groups[0])
         self.groups = groups
         self.lam, self.eta, self.theta = lam, eta, theta
         self.max_iter, self.eps = max_iter, epsilon
@@ -55,41 +57,35 @@ class Optimizer:
         # fetch the matrix related to k at initialization in order to
         # save time in following sequential embedding process.
         pt = time.time()
+        self.eye = sp.eye(self.k_size)
         self.m_0_all = self.graph.calc_matrix_sparse(groups[0], list(range(graph.nVertices)))
         self.m_all_0 = self.graph.calc_matrix_sparse(list(range(graph.nVertices)), groups[0])
-        self.m_0_0 = self.graph.calc_matrix(groups[0], groups[0])
+        self.m_0_0r, self.m_0_0c = self.graph.calc_matrix_sparse(groups[0], groups[0], -1)
         if verbose:
             print('Fetch matrix time: %.2f'
                   % (time.time() - pt))
 
         pt = time.time()
-        self.m_0_all2 = self.m_0_all @ self.m_0_all.T() - self.m_0_0 @ self.m_0_0.T
-        self.m_all_02 = self.m_all_0.T() @ self.m_all_0 - self.m_0_0.T @ self.m_0_0
+        self.m_0_all2 = self.m_0_all @ self.m_0_all.T \
+            - self.m_0_0r @ self.m_0_0r.T
+        self.m_all_02 = self.m_all_0.T @ self.m_all_0 \
+            - self.m_0_0c.T @ self.m_0_0c
         if verbose:
             print('Calculate remembered matrix time: %.2f'
                   % (time.time() - pt))
 
         # k decomposition: SVD
-        u, d, v = np.linalg.svd(self.m_0_0)
+        u, d, v = np.linalg.svd(self.m_0_0r.toarray())
         self.phi = (u[:, :dim] * np.sqrt(d[:dim])).T
         self.psi = (v.T[:, :dim] * np.sqrt(d[:dim])).T
         self.m0_tilde = self.phi.T @ self.psi
         self.m0_m0T = self.m0_tilde @ self.m0_tilde.T
         self.m0T_m0 = self.m0_tilde.T @ self.m0_tilde
 
-    def _get_rest_idx(self, group_idx):
-        rst = []
-        for i in range(1, len(self.groups)):
-            if i == group_idx:
-                continue
-            rst += self.groups[i]
-        return rst
-
     def train(self, group_idx, verbose=VERBOSE):
-
-        assert group_idx < len(self.groups)
+        assert group_idx < len(self.groups), 'group index exceeded max'
         if group_idx == 0:
-            # asking for k vertices
+            # asking for the K vertices
             return self.phi, self.psi
 
         indices = self.groups[group_idx]
@@ -101,15 +97,11 @@ class Optimizer:
         pt = time.time()
         # if n_1 <= n_0:
             # No need to sparsify matrices
-        m_0_1 = self.graph.calc_matrix(self.groups[0], indices)
-        m_1_0 = self.graph.calc_matrix(indices, self.groups[0])
-        m_1_1 = self.graph.calc_matrix(indices, indices)
-        # else:
-        #     m_0_1 = self.graph.calc_matrix_sparse(self.groups[0], indices)
-        #     m_1_0 = self.graph.calc_matrix_sparse(indices, self.groups[0])
-        #     m_1_1 = self.graph.calc_matrix_sparse(indices, indices)
-        m_1_all = self.graph.calc_matrix_sparse(indices, list(range(self.graph.nVertices)))
-        m_all_1 = self.graph.calc_matrix_sparse(list(range(self.graph.nVertices)), indices)
+        m_0_1 = self.graph.calc_matrix_sparse(self.groups[0], indices, style=0)
+        m_1_0 = self.graph.calc_matrix_sparse(indices, self.groups[0], style=1)
+        m_1_1r, m_1_1c = self.graph.calc_matrix_sparse(indices, indices, style=-1)
+        m_1_all = self.graph.calc_matrix_sparse(indices, list(range(self.graph.nVertices)), style=0)
+        m_all_1 = self.graph.calc_matrix_sparse(list(range(self.graph.nVertices)), indices, style=1)
         if verbose:
             print('Fetch matrix time: %.2f'
                   % (time.time() - pt))
@@ -119,45 +111,25 @@ class Optimizer:
         # where G(B) and b(B) are the B-related additive factors,
         # vice versa
         pt = time.time()
-
-        # if n_1 <= n_0:
         G0_A = self.m0_m0T + \
             self.lam * (self.m_0_all2 - m_0_1 @ m_0_1.T) + \
-            self.eta * np.eye(len(self.m0_m0T))
+            self.eta * self.eye
         G0_B = self.m0T_m0 + \
             self.lam * (self.m_all_02 - m_1_0.T @ m_1_0) + \
-            self.eta * np.eye(len(self.m0_m0T))
+            self.eta * self.eye
         b0_A = self.m0_tilde @ m_1_0.T + \
-            self.lam * (self.m_0_all @ m_1_all.T() -
-                        self.m_0_0 @ m_1_0.T -
-                        m_0_1 @ m_1_1.T)
+            self.lam * (self.m_0_all @ m_1_all.T -
+                        self.m_0_0r @ m_1_0.T -
+                        m_0_1 @ m_1_1r.T)
         b0_B = self.m0_tilde.T @ m_0_1 + \
-            self.lam * (self.m_all_0.T() @ m_all_1 -
-                        self.m_0_0.T @ m_0_1 -
-                        m_1_0.T @ m_1_1)
-        # else:
-        #     G0_A = self.m0_m0T + \
-        #         self.lam * (self.m_0_all2 - m_0_1 @ m_0_1.T()) + \
-        #         self.eta * np.eye(len(self.m0_m0T))
-        #     G0_B = self.m0T_m0 + \
-        #         self.lam * (self.m_all_02 - m_1_0.T() @ m_1_0) + \
-        #         self.eta * np.eye(len(self.m0_m0T))
-        #     b0_A = dense_sparse_mul(self.m0_tilde, m_1_0.T()) + \
-        #         self.lam * (self.m_0_all @ m_1_all.T() -
-        #                     dense_sparse_mul(self.m_0_0, m_1_0.T()) -
-        #                     m_0_1 @ m_1_1.T())
-        #     b0_B = dense_sparse_mul(self.m0_tilde.T, m_0_1) + \
-        #         self.lam * (self.m_all_0.T() @ m_all_1 -
-        #                     dense_sparse_mul(self.m_0_0.T, m_0_1) -
-        #                     m_1_0.T() @ m_1_1.change_axis())
+            self.lam * (self.m_all_0.T @ m_all_1 -
+                        self.m_0_0c.T @ m_0_1 -
+                        m_1_0.T @ m_1_1c)
         if verbose:
             print('Calculate G_0 and b_0 time: %.2f'
                   % (time.time() - pt))
         # delete useless variables in time.
         del m_0_1, m_1_0, m_all_1, m_1_all
-        # if necessary, change the community matrix into dense matrix
-        # if n_1 > n_0:
-        #    m_1_1 = m_1_1.to_dense()
 
         # 3.INITIALIZATION
         # init
@@ -178,14 +150,14 @@ class Optimizer:
             # fixing B updating A
             t_mb = self.m0_tilde @ B_prev
             G_A = G0_A + t_mb @ t_mb.T
-            b_A = b0_A + t_mb @ m_1_1.T
+            b_A = b0_A + t_mb @ m_1_1r.T
             A, state_A, res_A = self.descending_method(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
             del t_mb, G_A, b_A
 
             # fixing A updating B
             t_ma = self.m0_tilde.T @ A_prev
             G_B = G0_B + t_ma @ t_ma.T
-            b_B = b0_B + t_ma @ m_1_1
+            b_B = b0_B + t_ma @ m_1_1c
             B, state_B, res_B = self.descending_method(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
             del t_ma, G_B, b_B
 
