@@ -1,6 +1,7 @@
 import random
 import heapq as hq
 import numpy as np
+from set_cover import set_cover
 
 
 # TODO: implement more options for sample
@@ -107,6 +108,10 @@ def sample(net, k, method='deg_prob', vertex_group_sizes=None):
     elif method == 'uniform':
         probs = [1] * net.nVertices
         rst = reservoir(probs, k)
+    elif method == 'set_cover_dir':
+        return set_cover(net, k, 'dir')
+    elif method == 'set_cover_undir':
+        return set_cover(net, k, 'undir')
     else:
         raise AssertionError
     return rst

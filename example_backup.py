@@ -12,7 +12,7 @@ K_SIZE = 200
 DIMENSION = 100
 VERBOSE = 1
 GROUP_IGNORE = 1
-SAMPLE_METHOD = 'deg_deter'
+SAMPLE_METHOD = 'set_cover_undir'
 RANDOM_GROUPING = False
 
 DATASET = 'wiki'

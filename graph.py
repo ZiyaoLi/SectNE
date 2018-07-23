@@ -1,5 +1,4 @@
 import numpy as np
-from sparse_matrix import SparseMatrix
 from collections import defaultdict as ddict
 from scipy import sparse as sp
 
@@ -41,7 +40,7 @@ class Vertex:
             self.in_prox.add(vid)
 
     def weight(self):
-        return (self.in_degree + self.out_degree) / 2
+        return self.in_degree + self.out_degree
 
     def is_connected(self):
         if len(self.in_prox.difference({self.id})) > 0:
@@ -51,6 +50,9 @@ class Vertex:
             # if it has an out-neighbor other than itself
             return True
         return False
+
+    def __lt__(self, other):
+        return self.out_degree < other.out_degree
 
 
 class Graph:
