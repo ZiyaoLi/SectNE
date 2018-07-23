@@ -1,4 +1,5 @@
 import numpy as np
+from sparse_matrix import SparseMatrix
 
 
 LAMBDA = 1
@@ -7,11 +8,17 @@ N_EDGE_VERBOSE = 5e6
 N_VERTEX_VERBOSE = 5e5
 
 
-def inverse_index(idx, n_max_key):
-    rst = [-1] * n_max_key
-    for i, item in enumerate(idx):
-        rst[item] = i
-    return rst
+def inverse_index(idx, n_max_key, typ):
+    if typ == 'list':
+        rst = [-1] * n_max_key
+        for i, item in enumerate(idx):
+            rst[item] = i
+        return rst
+    else:
+        rst = {}
+        for i, item in enumerate(idx):
+            rst[item] = i
+        return rst
 
 
 class Vertex:
@@ -95,41 +102,80 @@ class Graph:
         else:
             return self.vertices[vid].in_prox
 
-    def fetch_prox_mat(self, idx_in, idx_out):
-        rst = np.zeros((len(idx_in), len(idx_out)))
-        for row_id, vid_in in enumerate(idx_in):
-            for col_id, vid_out in enumerate(idx_out):
-                if vid_out in self.fetch_prox(vid_in, 'out'):
-                    rst[row_id, col_id] = 1 / self.vertices[vid_in].out_degree
-        return rst
-
-    def calc_matrix(self, idx_in, idx_out):
-        prox_mat = self.fetch_prox_mat(idx_in, idx_out)
-        secondary_mat = np.zeros([len(idx_in), len(idx_out)])
+    def calc_matrix_sparse(self, idx_in, idx_out, verbose=VERBOSE):
         if len(idx_in) <= len(idx_out):
-            vid2colid_map = inverse_index(idx_out, self.nVertices)
+            mat = SparseMatrix(len(idx_in), len(idx_out), 0)
+            vid2colid_map = inverse_index(idx_out, self.nVertices, 'list')
             for row_id, vid in enumerate(idx_in):
                 for first_neighbor in self.fetch_prox(vid, 'out'):
+                    col_id_1 = vid2colid_map[first_neighbor]
+                    if col_id_1 > 0:
+                        mat.add_to_entry(row_id, col_id_1, 1 / self.vertices[vid].out_degree)
                     for second_neighbor in self.fetch_prox(first_neighbor, 'out'):
-                        col_id = vid2colid_map[second_neighbor]
-                        if col_id > 0:
-                            secondary_mat[row_id, col_id] += 1 / (
+                        col_id_2 = vid2colid_map[second_neighbor]
+                        if col_id_2 > 0:
+                            mat.add_to_entry(row_id, col_id_2, LAMBDA / (
+                                self.vertices[vid].out_degree *
+                                self.vertices[first_neighbor].out_degree
+                            ))
+        else:
+            mat = SparseMatrix(len(idx_in), len(idx_out), 1)
+            vid2rowid_map = inverse_index(idx_in, self.nVertices, 'list')
+            for col_id, vid in enumerate(idx_out):
+                for first_neighbor in self.fetch_prox(vid, 'in'):
+                    row_id_1 = vid2rowid_map[first_neighbor]
+                    if row_id_1 > 0:
+                        mat.add_to_entry(col_id, row_id_1, 1 / self.vertices[first_neighbor].out_degree)
+                    for second_neighbor in self.fetch_prox(first_neighbor, 'in'):
+                        row_id_2 = vid2rowid_map[second_neighbor]
+                        if row_id_2 > 0:
+                            mat.add_to_entry(col_id, row_id_2, LAMBDA / (
+                                self.vertices[second_neighbor].out_degree *
+                                self.vertices[first_neighbor].out_degree
+                            ))
+        return mat
+
+    def calc_matrix(self, idx_in, idx_out, verbose=VERBOSE):
+        mat = np.zeros([len(idx_in), len(idx_out)])
+        if len(idx_in) <= len(idx_out):
+            vid2colid_map = inverse_index(idx_out, self.nVertices, 'dict')
+            for row_id, vid in enumerate(idx_in):
+                for first_neighbor in self.fetch_prox(vid, 'out'):
+                    try:
+                        col_id_1 = vid2colid_map[first_neighbor]
+                        mat[row_id, col_id_1] += 1 / self.vertices[vid].out_degree
+                    except KeyError:
+                        pass
+                    for second_neighbor in self.fetch_prox(first_neighbor, 'out'):
+                        try:
+                            col_id_2 = vid2colid_map[second_neighbor]
+                            mat[row_id, col_id_2] += LAMBDA / (
                                 self.vertices[vid].out_degree *
                                 self.vertices[first_neighbor].out_degree
                             )
+                        except KeyError:
+                            pass
         else:
-            vid2rowid_map = inverse_index(idx_in, self.nVertices)
+            vid2rowid_map = inverse_index(idx_in, self.nVertices, 'dict')
             for col_id, vid in enumerate(idx_out):
                 for first_neighbor in self.fetch_prox(vid, 'in'):
+                    try:
+                        row_id_1 = vid2rowid_map[first_neighbor]
+                        mat[row_id_1, col_id] += 1 / (
+                            self.vertices[first_neighbor].out_degree
+                        )
+                    except KeyError:
+                        pass
                     for second_neighbor in self.fetch_prox(first_neighbor, 'in'):
-                        row_id = vid2rowid_map[second_neighbor]
-                        if row_id > 0:
-                            secondary_mat[row_id, col_id] += 1 / (
+                        try:
+                            row_id_2 = vid2rowid_map[second_neighbor]
+                            mat[row_id_2, col_id] += LAMBDA / (
                                 self.vertices[second_neighbor].out_degree *
                                 self.vertices[first_neighbor].out_degree
                             )
-
-        return (prox_mat + LAMBDA * secondary_mat)  # * self.nEdges * 2
+                        except KeyError:
+                            pass
+        return mat
 
     def _set_reduce_mapping(self):
         top = 0
@@ -174,7 +220,9 @@ if __name__ == '__main__':
     pt = time.time()
     a = graph.calc_matrix(k_set, list(range(graph.nVertices)))
     print('ROW TIME: %.2f' % (time.time() - pt))
+    del a
 
     pt = time.time()
     b = graph.calc_matrix(k_set, list(range(graph.nVertices)))
     print('COL TIME: %.2f' % (time.time() - pt))
+    del b

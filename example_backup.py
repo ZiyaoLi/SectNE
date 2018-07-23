@@ -93,7 +93,7 @@ original = net.calc_matrix(all_idx, all_idx)
 
 # evaluate the reconstruction performance
 delta = original - reconstruct
-abs_delta = abs(delta) * (original != 0)
+abs_delta = abs(delta)  # * (original != 0)
 if ABS_DELTA_MATRIX_TO_FILE:
     np.savetxt(FILE_NAME, abs_delta, '%.6e', ',', '\n')
 t = norm(abs_delta, 'fro')

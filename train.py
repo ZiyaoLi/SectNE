@@ -10,12 +10,14 @@ from numpy.linalg import norm
 from graph import Graph
 from sample import sample
 from descend import *
+from sparse_matrix import *
+import time
 
 # hyper parameters
 THETA = 1
 LAMBDA = 1
 ETA = 0.1
-MAX_ITER = 200
+MAX_ITER = 150
 EPSILON = 1e-4
 
 # dimensionality
@@ -28,6 +30,7 @@ THRESHOLD_MONITOR = 0.1
 PERCENTAGE_AVG = 0.55
 
 VERBOSE = 1
+DEBUG = False
 
 
 class Optimizer:
@@ -36,7 +39,8 @@ class Optimizer:
                  theta=THETA, lam=LAMBDA, eta=ETA,
                  max_iter=MAX_ITER, epsilon=EPSILON,
                  cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON,
-                 descending_method=inverse_descending):
+                 descending_method=inverse_descending,
+                 verbose=VERBOSE):
 
         self.graph = graph
         self.groups = groups
@@ -49,12 +53,23 @@ class Optimizer:
 
         # fetch the matrix related to k at initialization in order to
         # save time in following sequential embedding process.
-        self.m_0_all = self.graph.calc_matrix(groups[0], list(range(graph.nVertices)))
-        self.m_all_0 = self.graph.calc_matrix(list(range(graph.nVertices)), groups[0])
+        pt = time.time()
+        self.m_0_all = self.graph.calc_matrix_sparse(groups[0], list(range(graph.nVertices)))
+        self.m_all_0 = self.graph.calc_matrix_sparse(list(range(graph.nVertices)), groups[0])
+        self.m_0_0 = self.graph.calc_matrix(groups[0], groups[0])
+        if verbose:
+            print('Fetch matrix time: %.2f'
+                  % (time.time() - pt))
+
+        pt = time.time()
+        self.m_0_all2 = self.m_0_all @ self.m_0_all.T() - self.m_0_0 @ self.m_0_0.T
+        self.m_all_02 = self.m_all_0.T() @ self.m_all_0 - self.m_0_0.T @ self.m_0_0
+        if verbose:
+            print('Calculate remembered matrix time: %.2f'
+                  % (time.time() - pt))
 
         # k decomposition: SVD
-        m0 = self.m_0_all[:, groups[0]]
-        u, d, v = np.linalg.svd(m0)
+        u, d, v = np.linalg.svd(self.m_0_0)
         self.phi = (u[:, :dim] * np.sqrt(d[:dim])).T
         self.psi = (v.T[:, :dim] * np.sqrt(d[:dim])).T
         self.m0_tilde = self.phi.T @ self.psi
@@ -77,38 +92,74 @@ class Optimizer:
             return self.phi, self.psi
 
         indices = self.groups[group_idx]
-        rest_indices = self._get_rest_idx(group_idx)
-
-        # pre-calculate the matrices and intercepts to be used
-        # to minimize the efforts in the loop.
-
-        # 1. pre-calculate constants for A
-        m_1_0 = self.m_all_0[indices, :]
-        m_0_r = self.m_0_all[:, rest_indices]
-        m_1_r = self.graph.calc_matrix(self.groups[group_idx], rest_indices)
-        # G_A = G0_A + G(B), b_A = b0_A + b(B),
-        # where G(B) and b(B) are the B-related additive factors.
-        G0_A = self.m0_m0T + self.lam * (m_0_r @ m_0_r.T) + self.eta * np.eye(len(self.m0_m0T))
-        b0_A = self.m0_tilde @ m_1_0.T + self.lam * (m_0_r @ m_1_r.T)
-        # delete useless variables in time.
-        del m_1_0, m_0_r, m_1_r
-
-        # 2. similar process for B
-        m_0_1 = self.m_0_all[:, indices]
-        m_r_0 = self.m_all_0[rest_indices, :]
-        m_r_1 = self.graph.calc_matrix(rest_indices, self.groups[group_idx])
-        G0_B = self.m0T_m0 + self.lam * (m_r_0.T @ m_r_0) + self.eta * np.eye(len(self.m0_m0T))
-        b0_B = self.m0_tilde.T @ m_0_1 + self.lam * (m_r_0.T @ m_r_1)
-        del m_0_1, m_r_0, m_r_1
-
-        del rest_indices
-
-        # 3. m_1_1: the among-group information
-        m_1_1 = self.graph.calc_matrix(self.groups[group_idx], self.groups[group_idx])
-
-        # init
         n_0 = len(self.groups[0])
         n_1 = len(self.groups[group_idx])
+
+        # ###### PREPARATION ######
+        # 1.MATRIX FETCH
+        pt = time.time()
+        # if n_1 <= n_0:
+            # No need to sparsify matrices
+        m_0_1 = self.graph.calc_matrix(self.groups[0], indices)
+        m_1_0 = self.graph.calc_matrix(indices, self.groups[0])
+        m_1_1 = self.graph.calc_matrix(indices, indices)
+        # else:
+        #     m_0_1 = self.graph.calc_matrix_sparse(self.groups[0], indices)
+        #     m_1_0 = self.graph.calc_matrix_sparse(indices, self.groups[0])
+        #     m_1_1 = self.graph.calc_matrix_sparse(indices, indices)
+        m_1_all = self.graph.calc_matrix_sparse(indices, list(range(self.graph.nVertices)))
+        m_all_1 = self.graph.calc_matrix_sparse(list(range(self.graph.nVertices)), indices)
+        if verbose:
+            print('Fetch matrix time: %.2f'
+                  % (time.time() - pt))
+
+        # 2.G_0 & B_0 CALCULATION
+        # G_A = G0_A + G(B), b_A = b0_A + b(B),
+        # where G(B) and b(B) are the B-related additive factors,
+        # vice versa
+        pt = time.time()
+
+        # if n_1 <= n_0:
+        G0_A = self.m0_m0T + \
+            self.lam * (self.m_0_all2 - m_0_1 @ m_0_1.T) + \
+            self.eta * np.eye(len(self.m0_m0T))
+        G0_B = self.m0T_m0 + \
+            self.lam * (self.m_all_02 - m_1_0.T @ m_1_0) + \
+            self.eta * np.eye(len(self.m0_m0T))
+        b0_A = self.m0_tilde @ m_1_0.T + \
+            self.lam * (self.m_0_all @ m_1_all.T() -
+                        self.m_0_0 @ m_1_0.T -
+                        m_0_1 @ m_1_1.T)
+        b0_B = self.m0_tilde.T @ m_0_1 + \
+            self.lam * (self.m_all_0.T() @ m_all_1 -
+                        self.m_0_0.T @ m_0_1 -
+                        m_1_0.T @ m_1_1)
+        # else:
+        #     G0_A = self.m0_m0T + \
+        #         self.lam * (self.m_0_all2 - m_0_1 @ m_0_1.T()) + \
+        #         self.eta * np.eye(len(self.m0_m0T))
+        #     G0_B = self.m0T_m0 + \
+        #         self.lam * (self.m_all_02 - m_1_0.T() @ m_1_0) + \
+        #         self.eta * np.eye(len(self.m0_m0T))
+        #     b0_A = dense_sparse_mul(self.m0_tilde, m_1_0.T()) + \
+        #         self.lam * (self.m_0_all @ m_1_all.T() -
+        #                     dense_sparse_mul(self.m_0_0, m_1_0.T()) -
+        #                     m_0_1 @ m_1_1.T())
+        #     b0_B = dense_sparse_mul(self.m0_tilde.T, m_0_1) + \
+        #         self.lam * (self.m_all_0.T() @ m_all_1 -
+        #                     dense_sparse_mul(self.m_0_0.T, m_0_1) -
+        #                     m_1_0.T() @ m_1_1.change_axis())
+        if verbose:
+            print('Calculate G_0 and b_0 time: %.2f'
+                  % (time.time() - pt))
+        # delete useless variables in time.
+        del m_0_1, m_1_0, m_all_1, m_1_all
+        # if necessary, change the community matrix into dense matrix
+        # if n_1 > n_0:
+        #    m_1_1 = m_1_1.to_dense()
+
+        # 3.INITIALIZATION
+        # init
         # random initial values
         A_prev = np.random.random((n_0, n_1))
         B_prev = np.random.random((n_0, n_1))
@@ -118,6 +169,9 @@ class Optimizer:
         ite = 0
         altered = np.inf  # so that initial 'altered' doesn't stop the loop
         hist_altered = [np.inf] * N_HISTORY_MONITOR
+
+        # ###### ITERATION ######
+        pt = time.time()
         while ite < self.max_iter and altered > self.eps:
             ite += 1
             # fixing B updating A
@@ -143,25 +197,39 @@ class Optimizer:
             A_prev = A
             B_prev = B
 
-            if (state_A or state_B) and (verbose == 2):
-                res_mean = (np.mean(res_A) * state_A + np.mean(res_B) * state_B) / (state_A + state_B)
-                print("Warning: CG doesn't converge at iter %d, group %d. percentage of residuals: %.4f"
-                      % (ite, group_idx, res_mean))
+            # if (state_A or state_B) and (verbose == 2):
+            #     res_mean = (np.mean(res_A) * state_A + np.mean(res_B) * state_B) / (state_A + state_B)
+            #     print("Warning: CG doesn't converge at iter %d, group %d. percentage of residuals: %.4f"
+            #           % (ite, group_idx, res_mean))
+
+        # To avoid the error of providing max_iter as 0
+        A = A_prev
+        B = B_prev
 
         if ite == self.max_iter and verbose >= 1:
             print("Warning: optimization doesn't converge for group %d, residuals %.4f" % (group_idx, altered))
 
+        if verbose:
+            print('Iteration time: %.2f \n'
+                  'Average Iteration Time: %.2f'
+                  % (time.time() - pt, (time.time() - pt) / ite))
+
         w = self.phi @ A
         c = self.psi @ B
 
-        # debug info
-        original = self.graph.calc_matrix(self.groups[0] + self.groups[group_idx],
-                                          self.groups[0] + self.groups[group_idx])
-        reconstruct = np.concatenate([self.phi, w], 1).T @ \
-                      np.concatenate([self.psi, c], 1)
-        delta = abs(original - reconstruct)
-
-        t = norm(delta)
+        # # ###### DEBUG: ITERATION PERFORMANCE ######
+        # if DEBUG:
+        #     original = self.graph.calc_matrix(self.groups[0] + self.groups[group_idx],
+        #                                       self.groups[0] + self.groups[group_idx])
+        #     reconstruct = np.concatenate([self.phi, w], 1).T @ \
+        #                   np.concatenate([self.psi, c], 1)
+        #     delta = abs(original - reconstruct)
+        #
+        #     norm_delta = norm(delta, 'fro')
+        #     norm_original = norm(original, 'fro')
+        #     print("Original - %.4f, delta - %.4f, percentage - %.4f"
+        #           % (norm_original, norm_delta,
+        #              norm_delta / norm_original))
 
         return w, c
 
