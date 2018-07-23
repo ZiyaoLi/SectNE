@@ -8,7 +8,7 @@ import train
 from numpy.linalg import norm
 import time
 
-K_SIZE = 200
+K_SIZE = 1000
 DIMENSION = 100
 VERBOSE = 1
 GROUP_IGNORE = 1

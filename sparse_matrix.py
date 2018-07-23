@@ -1,4 +1,5 @@
 import numpy as np
+from collections import defaultdict as ddict
 
 
 def sparse_vector_mul(dict1, dict2):
@@ -14,14 +15,11 @@ def sparse_vector_mul(dict1, dict2):
 
 
 def dense_vector_sparse_mul(dense_vec, sparse):
-    rst = {}
+    rst = ddict(int)
     for i, weight in enumerate(dense_vec):
         for key, value in sparse.matrix[i].items():
-            try:
-                rst[key] += value * weight
-            except KeyError:
-                rst[key] = value * weight
-    return rst
+            rst[key] += value * weight
+    return dict(rst)
 
 
 def dense_sparse_mul(dense, sparse):

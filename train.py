@@ -17,8 +17,9 @@ import time
 THETA = 1
 LAMBDA = 1
 ETA = 0.1
-MAX_ITER = 150
+MAX_ITER = 50
 EPSILON = 1e-4
+DESCENDING_METHOD = inverse_descending
 
 # dimensionality
 DIMENSION = 100
@@ -39,7 +40,7 @@ class Optimizer:
                  theta=THETA, lam=LAMBDA, eta=ETA,
                  max_iter=MAX_ITER, epsilon=EPSILON,
                  cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON,
-                 descending_method=inverse_descending,
+                 descending_method=DESCENDING_METHOD,
                  verbose=VERBOSE):
 
         self.graph = graph
@@ -176,15 +177,15 @@ class Optimizer:
             ite += 1
             # fixing B updating A
             t_mb = self.m0_tilde @ B_prev
-            G_A = G0_A + self.theta * (t_mb @ t_mb.T)
-            b_A = b0_A + self.theta * (t_mb @ m_1_1.T)
+            G_A = G0_A + t_mb @ t_mb.T
+            b_A = b0_A + t_mb @ m_1_1.T
             A, state_A, res_A = self.descending_method(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
             del t_mb, G_A, b_A
 
             # fixing A updating B
             t_ma = self.m0_tilde.T @ A_prev
-            G_B = G0_B + self.theta * (t_ma @ t_ma.T)
-            b_B = b0_B + self.theta * (t_ma @ m_1_1)
+            G_B = G0_B + t_ma @ t_ma.T
+            b_B = b0_B + t_ma @ m_1_1
             B, state_B, res_B = self.descending_method(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
             del t_ma, G_B, b_B
 
