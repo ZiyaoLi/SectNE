@@ -1,6 +1,7 @@
 import numpy as np
 from collections import defaultdict as ddict
 from scipy import sparse as sp
+from numba import jit
 
 LAMBDA = 1
 VERBOSE = True
@@ -233,19 +234,6 @@ class Graph:
 
 if __name__ == '__main__':
     import time
-    from sample import sample
     pt = time.time()
     graph = Graph('data\\flickr\\links.txt')
     print('READ TIME: %.2f' % (time.time() - pt))
-
-    k_set = sample(graph, 1000, 'uniform')
-
-    pt = time.time()
-    a = graph.calc_matrix(k_set, list(range(graph.nVertices)))
-    print('ROW TIME: %.2f' % (time.time() - pt))
-    del a
-
-    pt = time.time()
-    b = graph.calc_matrix(k_set, list(range(graph.nVertices)))
-    print('COL TIME: %.2f' % (time.time() - pt))
-    del b

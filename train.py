@@ -10,12 +10,11 @@ from numpy.linalg import norm
 from graph import Graph
 from sample import sample
 from descend import *
-from sparse_matrix import *
+from numba import jit
 import time
 from scipy import sparse as sp
 
 # hyper parameters
-THETA = 1
 LAMBDA = 1
 ETA = 0.1
 MAX_ITER = 50
@@ -36,23 +35,27 @@ DEBUG = False
 
 
 class Optimizer:
-    def __init__(self, graph, groups,
-                 dim=DIMENSION,
-                 theta=THETA, lam=LAMBDA, eta=ETA,
+    def __init__(self, graph, groups, dim=DIMENSION,
+                 lam=LAMBDA, eta=ETA,
                  max_iter=MAX_ITER, epsilon=EPSILON,
                  cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON,
                  descending_method=DESCENDING_METHOD,
-                 verbose=VERBOSE):
+                 verbose=VERBOSE,
+                 grouping_strategy='Louvain',
+                 sample_strategy='NotSpecified'):
 
         self.graph = graph
         self.k_size = len(groups[0])
+        self.dim = dim
         self.groups = groups
-        self.lam, self.eta, self.theta = lam, eta, theta
+        self.lam, self.eta = lam, eta
         self.max_iter, self.eps = max_iter, epsilon
         self.cg_max_iter, self.cg_eps = cg_max_iter, cg_eps
         self.descending_method = descending_method
         self.inverse_index = None
         self.trained_embeddings = {}
+        self.grouping_strategy = grouping_strategy
+        self.sample_strategy = sample_strategy
 
         # fetch the matrix related to k at initialization in order to
         # save time in following sequential embedding process.
@@ -88,9 +91,15 @@ class Optimizer:
             # asking for the K vertices
             return self.phi, self.psi
 
+        ppt = time.time()
+
         indices = self.groups[group_idx]
         n_0 = len(self.groups[0])
         n_1 = len(self.groups[group_idx])
+
+        if verbose:
+            print('Start training group %d. %4d Vertices.'
+                  % (group_idx, n_1))
 
         # ###### PREPARATION ######
         # 1.MATRIX FETCH
@@ -183,8 +192,7 @@ class Optimizer:
             print("Warning: optimization doesn't converge for group %d, residuals %.4f" % (group_idx, altered))
 
         if verbose:
-            print('Iteration time: %.2f \n'
-                  'Average Iteration Time: %.2f'
+            print('Optimization iterations time: %.2f. Average: %.2f'
                   % (time.time() - pt, (time.time() - pt) / ite))
 
         w = self.phi @ A
