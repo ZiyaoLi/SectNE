@@ -1,4 +1,5 @@
 import numpy as np
+from numba import jit
 
 # please notice that @ operator is for matrix multiplication
 
@@ -84,6 +85,7 @@ def preconditioning_conjugate_gradient(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPS
     return x, ite == max_iter, rho_r / b_norms
 
 
+@jit
 def inverse_descending(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
     '''
     Implemented from algorithm CG for SPD matrix linear equations,
