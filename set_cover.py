@@ -1,5 +1,4 @@
 import heapq as hq
-import time
 
 VERBOSE = True
 
@@ -41,8 +40,9 @@ def set_cover(net, max_n, typ='dir', verbose=VERBOSE):
         assert False, 'invalid type provided: %s' % typ
     if verbose:
         print('%d vertices selected among %d in total (%.2f). \n'
-              'Covered %d vertices in total.'
+              'Covered %d / %d (%.2f) vertices in total.'
               % (len(rst), net.nVertices,
                  len(rst) / net.nVertices,
-                 len(dominated_set)))
+                 len(dominated_set), net.nVertices,
+                 len(dominated_set) / net.nVertices))
     return rst

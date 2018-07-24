@@ -8,11 +8,11 @@ import train
 from numpy.linalg import norm
 import time
 
-K_SIZE = 200
+K_SIZE = 607
 DIMENSION = 100
 VERBOSE = 1
 GROUP_IGNORE = 1
-SAMPLE_METHOD = 'set_cover_undir'
+SAMPLE_METHOD = 'deg_deter'
 RANDOM_GROUPING = False
 
 DATASET = 'wiki'
@@ -27,7 +27,9 @@ METHOD_MAP = {
     'deg|group_deter': 'dgd',
     'deg^2|group_prob': 'd2gp',
     'deg^2|group_deter': 'd2gd',
-    'uniform': 'uni'
+    'uniform': 'uni',
+    'set_cover_dir': 'scd',
+    'set_cover_undir': 'scud'
 }
 FILE_NAME = 'results\\' + '_'.join([
     DATASET,
@@ -95,15 +97,14 @@ ws = np.concatenate(vecs_w, 1)
 cs = np.concatenate(vecs_c, 1)
 
 # reconstructing matrix over the order of sampled vertices
+original = net.calc_matrix_sparse(all_idx, all_idx).toarray()
 reconstruct = ws.T @ cs
-original = net.calc_matrix(all_idx, all_idx)
 
 # evaluate the reconstruction performance
-delta = original - reconstruct
-abs_delta = abs(delta)  # * (original != 0)
+delta = reconstruct - original  # * (original != 0)
 if ABS_DELTA_MATRIX_TO_FILE:
-    np.savetxt(FILE_NAME, abs_delta, '%.6e', ',', '\n')
-t = norm(abs_delta, 'fro')
+    np.savetxt(FILE_NAME, delta, '%.6e', ',', '\n')
+t = norm(delta, 'fro')
 tt = norm(original, 'fro')
 print("Original - %.4f, delta - %.4f, percentage - %.4f"
       % (tt, t, t / tt))
@@ -113,7 +114,9 @@ u, d, v = np.linalg.svd(original)
 w_svd = (u[:, :DIMENSION] * np.sqrt(d[:DIMENSION])).T
 c_svd = (v.T[:, :DIMENSION] * np.sqrt(d[:DIMENSION])).T
 reconstruct_svd = w_svd.T @ c_svd
-delta_svd = (original - reconstruct_svd) * (original != 0)
+
+# evaluate the reconstruction performance
+delta_svd = (reconstruct_svd - original)  # * (original != 0)
 t_svd = norm(delta_svd, 'fro')
 print("Original - %.4f, delta - %.4f, percentage - %.4f"
       % (tt, t_svd, t_svd / tt))
