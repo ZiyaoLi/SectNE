@@ -27,7 +27,7 @@ DESCEND_METHOD = inverse_descending
 CG_MAX_ITER = CG_MAX_ITER  # imported from descending.py
 CG_EPSILON = CG_EPSILON    # imported from descending.py
 ##############################
-DATASET = 'wiki'
+DATASET = 'cora'
 TYPE = 'undir'
 DATADIR = 'data\\'
 ##############################
