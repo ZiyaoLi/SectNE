@@ -120,11 +120,11 @@ class Graph:
                 row = ddict(int)
                 for first_neighbor in self.fetch_prox(vid, 'out'):
                     col_id_1 = vid2colid_map[first_neighbor]
-                    if col_id_1 > 0:
+                    if col_id_1 >= 0:
                         row[col_id_1] += 1 / self.vertices[vid].out_degree
                     for second_neighbor in self.fetch_prox(first_neighbor, 'out'):
                         col_id_2 = vid2colid_map[second_neighbor]
-                        if col_id_2 > 0:
+                        if col_id_2 >= 0:
                             row[col_id_2] += LAMBDA / (
                                 self.vertices[vid].out_degree *
                                 self.vertices[first_neighbor].out_degree
@@ -141,11 +141,11 @@ class Graph:
                 col = ddict(int)
                 for first_neighbor in self.fetch_prox(vid, 'in'):
                     row_id_1 = vid2rowid_map[first_neighbor]
-                    if row_id_1 > 0:
+                    if row_id_1 >= 0:
                         col[row_id_1] += 1 / self.vertices[first_neighbor].out_degree
                     for second_neighbor in self.fetch_prox(first_neighbor, 'in'):
                         row_id_2 = vid2rowid_map[second_neighbor]
-                        if row_id_2 > 0:
+                        if row_id_2 >= 0:
                             col[row_id_2] += LAMBDA / (
                                 self.vertices[second_neighbor].out_degree *
                                 self.vertices[first_neighbor].out_degree

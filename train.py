@@ -15,11 +15,11 @@ import time
 from scipy import sparse as sp
 
 # hyper parameters
-LAMBDA = 1
+LAMBDA = 0.8
 ETA = 0.1
 MAX_ITER = 50
 EPSILON = 1e-4
-DESCENDING_METHOD = inverse_descending
+DESCENDING_METHOD = scipy_solve_descending
 
 # dimensionality
 DIMENSION = 100
@@ -56,15 +56,16 @@ class Optimizer:
         self.trained_embeddings = {}
         self.grouping_strategy = grouping_strategy
         self.sample_strategy = sample_strategy
+        self.verbose = verbose
 
         # fetch the matrix related to k at initialization in order to
         # save time in following sequential embedding process.
         pt = time.time()
         self.eye = sp.eye(self.k_size)
-        self.m_0_all = self.graph.calc_matrix_sparse(groups[0], list(range(graph.nVertices)))
-        self.m_all_0 = self.graph.calc_matrix_sparse(list(range(graph.nVertices)), groups[0])
+        self.m_0_all = self.graph.calc_matrix_sparse(groups[0], list(range(graph.nVertices)), 0)
+        self.m_all_0 = self.graph.calc_matrix_sparse(list(range(graph.nVertices)), groups[0], 1)
         self.m_0_0r, self.m_0_0c = self.graph.calc_matrix_sparse(groups[0], groups[0], -1)
-        if verbose:
+        if self.verbose:
             print('Fetch matrix time: %.2f'
                   % (time.time() - pt))
 
@@ -73,19 +74,19 @@ class Optimizer:
             - self.m_0_0r @ self.m_0_0r.T
         self.m_all_02 = self.m_all_0.T @ self.m_all_0 \
             - self.m_0_0c.T @ self.m_0_0c
-        if verbose:
+        if self.verbose:
             print('Calculate remembered matrix time: %.2f'
                   % (time.time() - pt))
 
         # k decomposition: SVD
         u, d, v = np.linalg.svd(self.m_0_0r.toarray())
-        self.phi = (u[:, :dim] * np.sqrt(d[:dim])).T
-        self.psi = (v.T[:, :dim] * np.sqrt(d[:dim])).T
+        self.phi = np.matrix((u[:, :dim] * np.sqrt(d[:dim])).T, copy=False)
+        self.psi = np.matrix((v.T[:, :dim] * np.sqrt(d[:dim])).T, copy=False)
         self.m0_tilde = self.phi.T @ self.psi
         self.m0_m0T = self.m0_tilde @ self.m0_tilde.T
         self.m0T_m0 = self.m0_tilde.T @ self.m0_tilde
 
-    def train(self, group_idx, verbose=VERBOSE):
+    def train(self, group_idx):
         assert group_idx < len(self.groups), 'group index exceeded max'
         if group_idx == 0:
             # asking for the K vertices
@@ -97,21 +98,19 @@ class Optimizer:
         n_0 = len(self.groups[0])
         n_1 = len(self.groups[group_idx])
 
-        if verbose:
+        if self.verbose:
             print('Start training group %d. %4d Vertices.'
                   % (group_idx, n_1))
 
         # ###### PREPARATION ######
         # 1.MATRIX FETCH
         pt = time.time()
-        # if n_1 <= n_0:
-            # No need to sparsify matrices
         m_0_1 = self.graph.calc_matrix_sparse(self.groups[0], indices, style=0)
         m_1_0 = self.graph.calc_matrix_sparse(indices, self.groups[0], style=1)
         m_1_1r, m_1_1c = self.graph.calc_matrix_sparse(indices, indices, style=-1)
         m_1_all = self.graph.calc_matrix_sparse(indices, list(range(self.graph.nVertices)), style=0)
         m_all_1 = self.graph.calc_matrix_sparse(list(range(self.graph.nVertices)), indices, style=1)
-        if verbose:
+        if self.verbose:
             print('Fetch matrix time: %.2f'
                   % (time.time() - pt))
 
@@ -134,7 +133,7 @@ class Optimizer:
             self.lam * (self.m_all_0.T @ m_all_1 -
                         self.m_0_0c.T @ m_0_1 -
                         m_1_0.T @ m_1_1c)
-        if verbose:
+        if self.verbose:
             print('Calculate G_0 and b_0 time: %.2f'
                   % (time.time() - pt))
         # delete useless variables in time.
@@ -143,41 +142,47 @@ class Optimizer:
         # 3.INITIALIZATION
         # init
         # random initial values
-        A_prev = np.random.random((n_0, n_1))
-        B_prev = np.random.random((n_0, n_1))
+        # A_prev = np.random.random((n_0, n_1))
+        # B_prev = np.random.random((n_0, n_1))
         # zero initial values
-        # A_prev = np.zeros((n_0, n_1))
-        # B_prev = np.zeros((n_0, n_1))
+        A_prev = np.matrix(np.zeros((n_0, n_1)), copy=False)
+        B_prev = np.matrix(np.zeros((n_0, n_1)), copy=False)
         ite = 0
         altered = np.inf  # so that initial 'altered' doesn't stop the loop
         hist_altered = [np.inf] * N_HISTORY_MONITOR
 
         # ###### ITERATION ######
         pt = time.time()
+        sum_descend = 0
+        t = np.matrix(np.zeros_like(A_prev), copy=False)
+        G = np.matrix(np.zeros_like(G0_A), copy=False)
+        b = np.matrix(np.zeros_like(b0_A), copy=False)
         while ite < self.max_iter and altered > self.eps:
             ite += 1
             # fixing B updating A
-            t_mb = self.m0_tilde @ B_prev
-            G_A = G0_A + t_mb @ t_mb.T
-            b_A = b0_A + t_mb @ m_1_1r.T
-            A, state_A, res_A = self.descending_method(A_prev, G_A, b_A, self.cg_max_iter, self.cg_eps)
-            del t_mb, G_A, b_A
+            t = np.dot(self.m0_tilde, B_prev, out=t)
+            G = np.add(G0_A, t @ t.T, out=G)
+            b = np.add(b0_A, t @ m_1_1r.T, out=b)
+            ptt = time.time()
+            A, state_A = self.descending_method(A_prev, G, b, self.cg_max_iter, self.cg_eps)
+            sum_descend += (time.time() - ptt)
 
             # fixing A updating B
-            t_ma = self.m0_tilde.T @ A_prev
-            G_B = G0_B + t_ma @ t_ma.T
-            b_B = b0_B + t_ma @ m_1_1c
-            B, state_B, res_B = self.descending_method(A_prev, G_B, b_B, self.cg_max_iter, self.cg_eps)
-            del t_ma, G_B, b_B
+            t = np.dot(self.m0_tilde.T, A_prev, out=t)
+            G = np.add(G0_B, t @ t.T, out=G)
+            b = np.add(b0_B, t @ m_1_1c, out=b)
+            ptt = time.time()
+            B, state_B = self.descending_method(B_prev, G, b, self.cg_max_iter, self.cg_eps)
+            sum_descend += (time.time() - ptt)
 
             altered = (norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf)) / A.shape[1]
             hist_altered = hist_altered[1:] + [altered]
-            improve_percentage = (np.mean(hist_altered) - altered) / altered
-            if improve_percentage < THRESHOLD_MONITOR:
+            if altered != 0 and \
+                    (np.mean(hist_altered) - altered) / altered < THRESHOLD_MONITOR:
                 A = A * PERCENTAGE_AVG + A_prev * (1 - PERCENTAGE_AVG)
                 B = B * PERCENTAGE_AVG + B_prev * (1 - PERCENTAGE_AVG)
-            A_prev = A
-            B_prev = B
+            A_prev = np.matrix(A, copy=False)
+            B_prev = np.matrix(B, copy=False)
 
             # if (state_A or state_B) and (verbose == 2):
             #     res_mean = (np.mean(res_A) * state_A + np.mean(res_B) * state_B) / (state_A + state_B)
@@ -188,12 +193,14 @@ class Optimizer:
         A = A_prev
         B = B_prev
 
-        if ite == self.max_iter and verbose >= 1:
+        if ite == self.max_iter and self.verbose:
             print("Warning: optimization doesn't converge for group %d, residuals %.4f" % (group_idx, altered))
 
-        if verbose:
+        if self.verbose:
             print('Optimization iterations time: %.2f. Average: %.2f'
                   % (time.time() - pt, (time.time() - pt) / ite))
+            print('During which the descending time is %.2f'
+                  % sum_descend)
 
         w = self.phi @ A
         c = self.psi @ B
@@ -230,9 +237,12 @@ class Optimizer:
         if self.inverse_index is None:
             # set an inverse index: vid -> (group_id, member_id)
             self._set_inverse_index()
-        group_idx, member_idx = self.inverse_index[vertex_idx]
+        try:
+            group_idx, member_idx = self.inverse_index[vertex_idx]
+        except TypeError:
+            pass
         if vertex_idx not in self.trained_embeddings.keys():
-            w, c = self.train(group_idx, verbose=verbose)
+            w, c = self.train(group_idx)
             for mid, vid in enumerate(self.groups[group_idx]):
                 self.trained_embeddings[vid] = w[:, mid]
         return self.trained_embeddings[vertex_idx]
@@ -240,7 +250,7 @@ class Optimizer:
 
 if __name__ == '__main__':
     net = Graph('data\\simple\\links.txt', typ=1)
-    k_set = sample(net, k=3, method='deg^2_prob')
+    # k_set = sample(net, k=3, method='deg^2_prob')
     sep = [[3, 4, 7], [1, 0, 6], [2, 8], [5, 9]]
     model = Optimizer(net, sep, dim=2)
     vecs_w = []
@@ -249,33 +259,3 @@ if __name__ == '__main__':
         w, c = model.train(t)
         vecs_w.append(w)
         vecs_c.append(c)
-
-    # concatenate all the derived vectors together
-    ws = np.concatenate(vecs_w, 1)
-    cs = np.concatenate(vecs_c, 1)
-
-    # reconstructing matrix over the order of sampled vertices
-    reconstruct = ws.T @ cs
-    all_idx = sep[0] + sep[1] + sep[2] + sep[3]
-    original = net.calc_matrix(all_idx, all_idx)
-
-    # evaluate the reconstruction performance
-    delta = original - reconstruct
-    abs_delta = abs(delta)
-    res_fnorm = norm(delta, 'fro')
-    ori_fnorm = norm(original, 'fro')
-    print("Original - %.4f, delta - %.4f, percentage - %.4f"
-          % (ori_fnorm, res_fnorm, res_fnorm / ori_fnorm))
-
-    # a SVD implementation to exam how good is the result
-    u, d, v = np.linalg.svd(original)
-    w_svd = (u[:, :2] * np.sqrt(d[:2])).T
-    c_svd = (v.T[:, :2] * np.sqrt(d[:2])).T
-    reconstruct_svd = w_svd.T @ c_svd
-    delta_svd = original - reconstruct_svd
-    t_svd = norm(delta_svd, 'fro')
-    print("Original - %.4f, delta - %.4f, percentage - %.4f"
-          % (ori_fnorm, t_svd, t_svd / ori_fnorm))
-
-
-

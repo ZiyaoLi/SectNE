@@ -7,6 +7,7 @@ import numpy as np
 # Vincent D. Blondel et al, Fast Unfolding of Communities in Large Networks, Phy.Rev.E, 2008
 
 MAX_ITER = 10
+MERGE = (1, 2000)
 
 
 class Community:
@@ -99,11 +100,13 @@ class MetaNode:
 
 
 class Louvain:
-    def __init__(self, net, verbose=True):
+    def __init__(self, net, rand=True, verbose=True):
         self.meta_nodes = []  # the current community_ids of vertices
         self.volume = net.nEdges
         self.communities = []
         self.n_communities = 0
+        self.rand = rand
+        self.verbose = verbose
         for vid in range(net.nVertices):
             if verbose:
                 if not vid % 5e5:
@@ -237,7 +240,7 @@ class Louvain:
             vertices += self.meta_nodes[meta_id].vertices
         return vertices
 
-    def first_stage(self, rand=False, verbose=True):
+    def first_stage(self):
         # whether there is ops in this function
         amount_increase = 0
         visit_sequence = list(range(len(self.meta_nodes)))
@@ -246,7 +249,7 @@ class Louvain:
             ite += 1
             # whether there is ops in this loop
             amount_loop_increase = 0
-            if rand:
+            if self.rand:
                 # shuffle the sequence
                 random.shuffle(visit_sequence)
             for meta_id_i in visit_sequence:
@@ -308,7 +311,7 @@ class Louvain:
                     new_comm_id = self.add_community()
                     self.add_to_community(meta_id_i, new_comm_id)
 
-            if verbose:
+            if self.verbose:
                 print('Looping %d of the first stage. increase=%.4f' % (ite, amount_loop_increase))
 
             if not amount_loop_increase:
@@ -343,25 +346,39 @@ class Louvain:
         self.communities = []
         self.n_communities = 0
 
-    def get_groups(self):
+    def get_groups(self, merge=MERGE):
         groups = []
+        merged_groups = []
         for meta_node in self.meta_nodes:
-            groups.append(meta_node.vertices)
+            if len(meta_node.vertices) < merge[0]:
+                merged_groups.extend(meta_node.vertices)
+                if len(merged_groups) > merge[1]:
+                    groups.append(merged_groups)
+                    merged_groups = []
+            elif len(meta_node.vertices) > merge[1]:
+                long_group = meta_node.vertices
+                random.shuffle(long_group)
+                while len(long_group):
+                    groups.append(long_group[:merge[1]])
+                    long_group = long_group[merge[1]:]
+            else:
+                groups.append(meta_node.vertices)
+        groups.append(merged_groups)
         return groups
 
-    def execute(self, max_iter=MAX_ITER, rand=False, verbose=True):
+    def execute(self, max_iter=MAX_ITER, merge=MERGE):
         ite = 0
         while ite < max_iter:
             ite += 1
-            amount_increase = self.first_stage(rand=rand)
-            if verbose:
+            amount_increase = self.first_stage()
+            if self.verbose:
                 print("%d iteration finished. first stage increase:%.4f"
                       % (ite, amount_increase))
             if amount_increase > 0:
                 self.second_stage()
             else:
                 break
-        return self.get_groups()
+        return self.get_groups(merge=merge)
 
 
 def groups2inv_index(groups, n_vertices, override_set=set()):

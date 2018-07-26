@@ -12,12 +12,13 @@ K_SIZE = 400
 DIMENSION = 128
 VERBOSE = 1
 GROUP_IGNORE = 1
+MERGE = (500, 10000)
 SAMPLE_METHOD = 'deg^2|group_prob'
 RANDOM_GROUPING = True
 
 DATASET = 'flickr'
 DATADIR = 'data\\'
-ABS_DELTA_MATRIX_TO_FILE = True
+ABS_DELTA_MATRIX_TO_FILE = False
 LOG_TO_FILE = True
 UNIQUE_NAME = '%.3f' % np.random.rand()
 DELTA_FILE_NAME = 'results\\' + '_'.join([
@@ -49,7 +50,7 @@ print('READ TIME: %.2f' % (time.time() - pt))
 
 pt = time.time()
 grouping_model = Louvain(net)
-groups = grouping_model.execute(rand=RANDOM_GROUPING)
+groups = grouping_model.execute(merge=MERGE)
 print('GROUP TIME: %.2f' % (time.time() - pt))
 
 group_sizes = [len(t) for t in groups]
@@ -76,14 +77,11 @@ vecs_c = []
 all_idx = []
 for t in range(len(groups)):
     pt = time.time()
-    if len(groups[t]) <= GROUP_IGNORE:
+    if len(groups[t]) < 1:
         continue
     print("%d / %d, n_vertices = %d..., accumul_vertex = %d "
           % (t + 1, len(groups), len(groups[t]), len(all_idx)))
-    if len(groups[t]) > 2000:
-        print('sorry, this group is too giant.')
-        continue
-    w, c = model.train(t, verbose=VERBOSE)
+    w, c = model.train(t)
     print('GROUP TRAINING TIME: %.2f' % (time.time() - pt))
     vecs_w.append(w)
     vecs_c.append(c)
