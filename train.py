@@ -17,7 +17,7 @@ from scipy import sparse as sp
 # hyper parameters
 LAMBDA = 0.8
 ETA = 0.1
-MAX_ITER = 50
+MAX_ITER = 5
 EPSILON = 1e-4
 DESCENDING_METHOD = scipy_solve_descending
 

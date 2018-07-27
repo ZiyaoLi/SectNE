@@ -8,14 +8,14 @@ import train
 from numpy.linalg import norm
 import time
 
-K_SIZE = 200
-DIMENSION = 100
+K_SIZE = 1000
+DIMENSION = 128
 VERBOSE = 1
-MERGE = (500, 10000)
+MERGE = (500, 8000)
 SAMPLE_METHOD = 'set_cover_undir'
 RANDOM_GROUPING = False
 
-DATASET = 'wiki'
+DATASET = 'flickr'
 DATADIR = 'data\\'
 ABS_DELTA_MATRIX_TO_FILE = False
 UNIQUE_NAME = ''
@@ -92,22 +92,22 @@ print('ALL GROUPS TRAINING TIME: %.2f' % (time.time() - ppt))
 print('TOTAL TIME: %.2f' % (time.time() - pt0))
 
 
-# concatenate all the derived vectors together
-ws = np.concatenate(vecs_w, 1)
-cs = np.concatenate(vecs_c, 1)
-
-# reconstructing matrix over the order of sampled vertices
-original = net.calc_matrix_sparse(all_idx, all_idx).toarray()
-reconstruct = ws.T @ cs
-
-# evaluate the reconstruction performance
-delta = reconstruct - original  # * (original != 0)
-if ABS_DELTA_MATRIX_TO_FILE:
-    np.savetxt(FILE_NAME, delta, '%.6e', ',', '\n')
-t = norm(delta, 'fro')
-tt = norm(original, 'fro')
-print("Original - %.4f, delta - %.4f, percentage - %.4f"
-      % (tt, t, t / tt))
+# # concatenate all the derived vectors together
+# ws = np.concatenate(vecs_w, 1)
+# cs = np.concatenate(vecs_c, 1)
+#
+# # reconstructing matrix over the order of sampled vertices
+# original = net.calc_matrix_sparse(all_idx, all_idx).toarray()
+# reconstruct = ws.T @ cs
+#
+# # evaluate the reconstruction performance
+# delta = reconstruct - original  # * (original != 0)
+# if ABS_DELTA_MATRIX_TO_FILE:
+#     np.savetxt(FILE_NAME, delta, '%.6e', ',', '\n')
+# t = norm(delta, 'fro')
+# tt = norm(original, 'fro')
+# print("Original - %.4f, delta - %.4f, percentage - %.4f"
+#       % (tt, t, t / tt))
 
 # a SVD implementation to exam how good is the result
 # u, d, v = np.linalg.svd(original)

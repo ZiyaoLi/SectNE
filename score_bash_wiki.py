@@ -13,6 +13,7 @@ VERBOSE = True
 ##############################
 K_SIZE = 200
 DIMENSION = 128
+ORDER = 2
 ##############################
 RANDOM_GROUPING = True
 MERGE = (200, 4000)
@@ -27,7 +28,7 @@ DESCEND_METHOD = inverse_descending
 CG_MAX_ITER = CG_MAX_ITER  # imported from descending.py
 CG_EPSILON = CG_EPSILON    # imported from descending.py
 ##############################
-DATASET = 'cora'
+DATASET = 'wiki'
 TYPE = 'undir'
 DATADIR = 'data\\'
 ##############################
@@ -38,7 +39,7 @@ f = open('results\\' + DATASET + '_output_bigk.log', 'w')
 pt0 = time.time()
 
 pt = time.time()
-net = Graph(DATADIR + DATASET + '\\links.txt', typ=TYPE, verbose=VERBOSE)
+net = Graph(DATADIR + DATASET + '\\links.txt', typ=TYPE, order=ORDER, verbose=VERBOSE)
 print('READ TIME: %.2f' % (time.time() - pt))
 
 pt = time.time()
@@ -58,7 +59,7 @@ inv_index = groups2inv_index(groups, net.nVertices, k_set)
 pure_override_nodes(groups, inv_index)
 groups = [k_set] + groups
 
-for MAX_ITER in (1, 2, 3, 4):
+for MAX_ITER in (1, 5, 10, 30, 100):
     pt = time.time()
     model = Optimizer(net, groups, dim=DIMENSION,
                       lam=LAMBDA, eta=ETA, max_iter=MAX_ITER, epsilon=EPSILON,

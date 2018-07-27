@@ -4,6 +4,7 @@ from scipy import sparse as sp
 from numba import jit
 
 LAMBDA = 1
+ORDER = 2
 VERBOSE = True
 N_EDGE_VERBOSE = 5e6
 N_VERTEX_VERBOSE = 5e5
@@ -58,10 +59,13 @@ class Vertex:
 
 class Graph:
 
-    def __init__(self, filename, sep='\t', typ='dir', verbose=VERBOSE):
+    def __init__(self, filename, sep='\t', typ='dir',
+                 order=ORDER,
+                 verbose=VERBOSE):
         self.vertices = []
         self.nVertices = 0
         self.nEdges = 0
+        self.order = order
         f = open(filename, 'r')
         s = f.readline()
         while len(s):
@@ -118,17 +122,21 @@ class Graph:
             vid2colid_map = inverse_index(idx_col, self.nVertices, 'list')
             for row_id, vid in enumerate(idx_row):
                 row = ddict(int)
+                col_id_0 = vid2colid_map[vid]
+                if col_id_0 >= 0:
+                    row[col_id_0] += 1
                 for first_neighbor in self.fetch_prox(vid, 'out'):
                     col_id_1 = vid2colid_map[first_neighbor]
                     if col_id_1 >= 0:
                         row[col_id_1] += 1 / self.vertices[vid].out_degree
-                    for second_neighbor in self.fetch_prox(first_neighbor, 'out'):
-                        col_id_2 = vid2colid_map[second_neighbor]
-                        if col_id_2 >= 0:
-                            row[col_id_2] += LAMBDA / (
-                                self.vertices[vid].out_degree *
-                                self.vertices[first_neighbor].out_degree
-                            )
+                    if self.order == 2:
+                        for second_neighbor in self.fetch_prox(first_neighbor, 'out'):
+                            col_id_2 = vid2colid_map[second_neighbor]
+                            if col_id_2 >= 0:
+                                row[col_id_2] += LAMBDA / (
+                                    self.vertices[vid].out_degree *
+                                    self.vertices[first_neighbor].out_degree
+                                )
                 data.extend(list(row.values()))
                 indices.extend(list(row.keys()))
                 current_ptr += len(row)
@@ -139,17 +147,21 @@ class Graph:
             vid2rowid_map = inverse_index(idx_row, self.nVertices, 'list')
             for col_id, vid in enumerate(idx_col):
                 col = ddict(int)
+                row_id_0 = vid2rowid_map[vid]
+                if row_id_0 >= 0:
+                    col[row_id_0] += 1
                 for first_neighbor in self.fetch_prox(vid, 'in'):
                     row_id_1 = vid2rowid_map[first_neighbor]
                     if row_id_1 >= 0:
                         col[row_id_1] += 1 / self.vertices[first_neighbor].out_degree
-                    for second_neighbor in self.fetch_prox(first_neighbor, 'in'):
-                        row_id_2 = vid2rowid_map[second_neighbor]
-                        if row_id_2 >= 0:
-                            col[row_id_2] += LAMBDA / (
-                                self.vertices[second_neighbor].out_degree *
-                                self.vertices[first_neighbor].out_degree
-                            )
+                    if self.order == 2:
+                        for second_neighbor in self.fetch_prox(first_neighbor, 'in'):
+                            row_id_2 = vid2rowid_map[second_neighbor]
+                            if row_id_2 >= 0:
+                                col[row_id_2] += LAMBDA / (
+                                    self.vertices[second_neighbor].out_degree *
+                                    self.vertices[first_neighbor].out_degree
+                                )
                 data.extend(list(col.values()))
                 indices.extend(list(col.keys()))
                 current_ptr += len(col)
