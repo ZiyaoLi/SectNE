@@ -11,13 +11,14 @@ import sys
 ##############################
 VERBOSE = True
 ##############################
-K_SIZE = 200
+K_SIZE = 3000
 DIMENSION = 128
 ORDER = 2
+WITHDIAG = False
 ##############################
 RANDOM_GROUPING = True
 MERGE = (200, 4000)
-SAMPLE_METHOD = 'set_cover_undir'
+SAMPLE_METHOD = 'uniform'
 ##############################
 LAMBDA = 0.4
 ETA = 0.1
@@ -28,7 +29,7 @@ DESCEND_METHOD = inverse_descending
 CG_MAX_ITER = CG_MAX_ITER  # imported from descending.py
 CG_EPSILON = CG_EPSILON    # imported from descending.py
 ##############################
-DATASET = 'wiki'
+DATASET = 'cora'
 TYPE = 'undir'
 DATADIR = 'data\\'
 ##############################
@@ -39,7 +40,9 @@ f = open('results\\' + DATASET + '_output_bigk.log', 'w')
 pt0 = time.time()
 
 pt = time.time()
-net = Graph(DATADIR + DATASET + '\\links.txt', typ=TYPE, order=ORDER, verbose=VERBOSE)
+net = Graph(DATADIR + DATASET + '\\links.txt',
+            typ=TYPE, order=ORDER, withdiag=WITHDIAG,
+            verbose=VERBOSE)
 print('READ TIME: %.2f' % (time.time() - pt))
 
 pt = time.time()
@@ -59,7 +62,7 @@ inv_index = groups2inv_index(groups, net.nVertices, k_set)
 pure_override_nodes(groups, inv_index)
 groups = [k_set] + groups
 
-for MAX_ITER in (1, 5, 10, 30, 100):
+for MAX_ITER in (300,):
     pt = time.time()
     model = Optimizer(net, groups, dim=DIMENSION,
                       lam=LAMBDA, eta=ETA, max_iter=MAX_ITER, epsilon=EPSILON,
@@ -69,7 +72,7 @@ for MAX_ITER in (1, 5, 10, 30, 100):
     print('INITIAL OPTIMIZER TIME (SVD): %.2f' % (time.time() - pt))
 
     multi_class_classification(optimizer=model, sample_filename=DATADIR + DATASET + '\\group.txt', cv=True,
-                               cross_val_fold=[10])
+                               cross_val_fold=[2, 3, 5, 8, 10])
     # multi_class_classification(optimizer=model, sample_filename=DATADIR + DATASET + '\\group.txt', cv=False)
 
 f.close()

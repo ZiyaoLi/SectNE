@@ -23,6 +23,33 @@ def read_pairs(filename, sep='\t'):
     return pairs
 
 
+def read_multi_labels(filename, sep='\t'):
+    labels = []
+    f = open(filename, 'r')
+    s = f.readline()
+    while len(s):
+        pair = s.strip().split(sep)
+        vid = int(pair[0])
+        lab = [int(t) for t in pair[1:]]
+        labels.append((vid, lab))
+        s = f.readline()
+    return labels
+
+
+def read_embeddings(filename, sep=' '):
+    embeddings = {}
+    f = open(filename, 'r')
+    f.readline()  # read the first line
+    s = f.readline()
+    while len(s):
+        embed = s.strip().split(sep)
+        idx = int(embed[0])
+        vector = np.array([float(t) for t in embed[1:]])
+        embeddings[idx] = vector
+        s = f.readline()
+    return embeddings
+
+
 def sample_id_mapping(samples, id_map):
     new_samples = []
     for oldVid, label in samples:
@@ -36,16 +63,17 @@ def show_results_shuffle(optimizer, micro, macro, train_percentage):
     n_shuffle = micro.shape[1]
     print('Results')
     print('-------------------------------------')
-    print('Setting:')
-    print('K SIZE:      %d' % optimizer.k_size)
-    print('DIMENSION:   %d' % optimizer.dim)
-    print('LAMBDA:      %.2f' % optimizer.lam)
-    print('ETA:         %.2f' % optimizer.eta)
-    print('MAX_ITER:    %d' % optimizer.max_iter)
-    print('EPSILON:     %.1e' % optimizer.eps)
-    print('GROUPING:    %s' % optimizer.grouping_strategy)
-    print('K SAMPLING:  %s' % optimizer.sample_strategy)
-    print('-------------------------------------')
+    if optimizer is not None:
+        print('Setting:')
+        print('K SIZE:      %d' % optimizer.k_size)
+        print('DIMENSION:   %d' % optimizer.dim)
+        print('LAMBDA:      %.2f' % optimizer.lam)
+        print('ETA:         %.2f' % optimizer.eta)
+        print('MAX_ITER:    %d' % optimizer.max_iter)
+        print('EPSILON:     %.1e' % optimizer.eps)
+        print('GROUPING:    %s' % optimizer.grouping_strategy)
+        print('K SAMPLING:  %s' % optimizer.sample_strategy)
+        print('-------------------------------------')
     for i, percentage in enumerate(train_percentage):
         print('Train percentage:  %.2f' % (1 - percentage))
         print('Iter           Micro       Macro')
@@ -61,16 +89,17 @@ def show_results_shuffle(optimizer, micro, macro, train_percentage):
 def show_results_cv(optimizer, micro, macro):
     print('Results')
     print('-------------------------------------')
-    print('Setting:')
-    print('K SIZE:      %d' % optimizer.k_size)
-    print('DIMENSION:   %d' % optimizer.dim)
-    print('LAMBDA:      %.2f' % optimizer.lam)
-    print('ETA:         %.2f' % optimizer.eta)
-    print('MAX_ITER:    %d' % optimizer.max_iter)
-    print('EPSILON:     %.1e' % optimizer.eps)
-    print('GROUPING:    %s' % optimizer.grouping_strategy)
-    print('K SAMPLING:  %s' % optimizer.sample_strategy)
-    print('-------------------------------------')
+    if optimizer is not None:
+        print('Setting:')
+        print('K SIZE:      %d' % optimizer.k_size)
+        print('DIMENSION:   %d' % optimizer.dim)
+        print('LAMBDA:      %.2f' % optimizer.lam)
+        print('ETA:         %.2f' % optimizer.eta)
+        print('MAX_ITER:    %d' % optimizer.max_iter)
+        print('EPSILON:     %.1e' % optimizer.eps)
+        print('GROUPING:    %s' % optimizer.grouping_strategy)
+        print('K SAMPLING:  %s' % optimizer.sample_strategy)
+        print('-------------------------------------')
     for i in range(len(micro)):
         print('Train percentage:  %.2f' % (1 - 1 / len(micro[i])))
         print('Fold           Micro       Macro')
@@ -122,3 +151,122 @@ def multi_class_classification(optimizer, sample_filename, cv=True,
             macro_results.append(cross_val_score(model, x_matrix, y_list, scoring='f1_macro', cv=k_fold))
 
         show_results_cv(optimizer, micro_results, macro_results)
+
+
+def multi_class_classification_dw(embedding_filename, sample_filename, cv=True,
+                                  test_percentage=TEST_PERCT,
+                                  cross_val_fold=CROSS_VAL_FOLD,
+                                  n_shuffle=SHUFFLE):
+    embeddings = read_embeddings(embedding_filename)
+    samples = read_pairs(sample_filename)
+    random.shuffle(samples)
+    x_list = [embeddings[t[0]] for t in samples]
+    x_matrix = np.stack(x_list)
+    del x_list
+    y_list = [t[1] for t in samples]
+
+    if not cv:
+        micro_results = np.zeros((len(test_percentage), n_shuffle))
+        macro_results = np.zeros((len(test_percentage), n_shuffle))
+
+        for i, percentage in enumerate(test_percentage):
+            for ite in range(n_shuffle):
+                x_train, x_test, y_train, y_test = train_test_split(
+                    x_matrix, y_list,
+                    test_size=percentage)
+                model = OneVsRestClassifier(SVC())
+                model.fit(x_train, y_train)
+                pred = model.predict(x_test)
+
+                micro_results[i, ite] = f1_score(y_test, pred, average='micro')
+                macro_results[i, ite] = f1_score(y_test, pred, average='macro')
+
+        show_results_shuffle(None, micro_results, macro_results, test_percentage)
+    else:
+        micro_results = []
+        macro_results = []
+
+        for i, k_fold in enumerate(cross_val_fold):
+            model = OneVsRestClassifier(SVC())
+            micro_results.append(cross_val_score(model, x_matrix, y_list, scoring='f1_micro', cv=k_fold))
+            macro_results.append(cross_val_score(model, x_matrix, y_list, scoring='f1_macro', cv=k_fold))
+
+        show_results_cv(None, micro_results, macro_results)
+
+
+def multi_label_classification(optimizer, sample_filename, test_percentage=TEST_PERCT,
+                               n_shuffle=SHUFFLE, verbose=True):
+    samples = read_multi_labels(sample_filename)
+    if verbose:
+        print('Samples Read.')
+    random.shuffle(samples)
+    x_list = optimizer.embed([t[0] for t in samples])
+    if verbose:
+        print('Vertices Embedded.')
+    x_matrix = np.concatenate(x_list, axis=1).T
+    del x_list
+    y_list = [t[1] for t in samples]
+    y_matrix = np.array(y_list)
+
+    micro_results = np.zeros((len(test_percentage), n_shuffle))
+    macro_results = np.zeros((len(test_percentage), n_shuffle))
+
+    for i, percentage in enumerate(test_percentage):
+        if verbose:
+            print('Training classifier with percentage %.2f' % percentage)
+        for ite in range(n_shuffle):
+            x_train, x_test, y_train, y_test = train_test_split(
+                x_matrix, y_matrix,
+                test_size=percentage)
+            model = OneVsRestClassifier(SVC())
+            model.fit(x_train, y_train)
+            pred = model.predict(x_test)
+
+            micro_results[i, ite] = f1_score(y_test, pred, average='micro')
+            macro_results[i, ite] = f1_score(y_test, pred, average='macro')
+
+    show_results_shuffle(None, micro_results, macro_results, test_percentage)
+
+
+def multi_label_classification_dw(embedding_filename, sample_filename, test_percentage=TEST_PERCT,
+                                  n_shuffle=SHUFFLE, verbose=True):
+    embeddings = read_embeddings(embedding_filename)
+    if verbose:
+        print('Embeddings Read.')
+    samples = read_multi_labels(sample_filename)
+    if verbose:
+        print('Samples Read.')
+    for i, _ in samples:
+        if i not in embeddings.keys():
+            print(i)
+    return
+    random.shuffle(samples)
+    x_list = [embeddings[t[0]] for t in samples]
+    x_matrix = np.stack(x_list)
+    del x_list
+    y_list = [t[1] for t in samples]
+    y_matrix = np.array(y_list)
+
+    micro_results = np.zeros((len(test_percentage), n_shuffle))
+    macro_results = np.zeros((len(test_percentage), n_shuffle))
+
+    for i, percentage in enumerate(test_percentage):
+        if verbose:
+            print('Training classifier with percentage %.2f' % percentage)
+        for ite in range(n_shuffle):
+            x_train, x_test, y_train, y_test = train_test_split(
+                x_matrix, y_matrix,
+                test_size=percentage)
+            model = OneVsRestClassifier(SVC())
+            model.fit(x_train, y_train)
+            pred = model.predict(x_test)
+
+            micro_results[i, ite] = f1_score(y_test, pred, average='micro')
+            macro_results[i, ite] = f1_score(y_test, pred, average='macro')
+
+    show_results_shuffle(None, micro_results, macro_results, test_percentage)
+
+
+if __name__ == '__main__':
+    multi_label_classification_dw('data\\flickr\\dw10.txt', 'data\\flickr\\samples.txt')
+    #multi_label_classification_dw('data\\del3.txt', 'data\\del2.txt', test_percentage=[0.2, 0.5])
