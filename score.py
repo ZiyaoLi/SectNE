@@ -1,6 +1,6 @@
 import numpy as np
 import random
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.multiclass import OneVsRestClassifier
@@ -133,7 +133,7 @@ def multi_class_classification(optimizer, sample_filename, cv=True,
                 x_train, x_test, y_train, y_test = train_test_split(
                     x_matrix, y_list,
                     test_size=percentage)
-                model = OneVsRestClassifier(SVC())
+                model = OneVsRestClassifier(LinearSVC())
                 model.fit(x_train, y_train)
                 pred = model.predict(x_test)
 
@@ -146,7 +146,7 @@ def multi_class_classification(optimizer, sample_filename, cv=True,
         macro_results = []
 
         for i, k_fold in enumerate(cross_val_fold):
-            model = OneVsRestClassifier(SVC())
+            model = OneVsRestClassifier(LinearSVC())
             micro_results.append(cross_val_score(model, x_matrix, y_list, scoring='f1_micro', cv=k_fold))
             macro_results.append(cross_val_score(model, x_matrix, y_list, scoring='f1_macro', cv=k_fold))
 
@@ -174,7 +174,7 @@ def multi_class_classification_dw(embedding_filename, sample_filename, cv=True,
                 x_train, x_test, y_train, y_test = train_test_split(
                     x_matrix, y_list,
                     test_size=percentage)
-                model = OneVsRestClassifier(SVC())
+                model = OneVsRestClassifier(LinearSVC())
                 model.fit(x_train, y_train)
                 pred = model.predict(x_test)
 
@@ -187,7 +187,7 @@ def multi_class_classification_dw(embedding_filename, sample_filename, cv=True,
         macro_results = []
 
         for i, k_fold in enumerate(cross_val_fold):
-            model = OneVsRestClassifier(SVC())
+            model = OneVsRestClassifier(LinearSVC())
             micro_results.append(cross_val_score(model, x_matrix, y_list, scoring='f1_micro', cv=k_fold))
             macro_results.append(cross_val_score(model, x_matrix, y_list, scoring='f1_macro', cv=k_fold))
 
@@ -218,7 +218,7 @@ def multi_label_classification(optimizer, sample_filename, test_percentage=TEST_
             x_train, x_test, y_train, y_test = train_test_split(
                 x_matrix, y_matrix,
                 test_size=percentage)
-            model = OneVsRestClassifier(SVC())
+            model = OneVsRestClassifier(LinearSVC())
             model.fit(x_train, y_train)
             pred = model.predict(x_test)
 
@@ -236,10 +236,6 @@ def multi_label_classification_dw(embedding_filename, sample_filename, test_perc
     samples = read_multi_labels(sample_filename)
     if verbose:
         print('Samples Read.')
-    for i, _ in samples:
-        if i not in embeddings.keys():
-            print(i)
-    return
     random.shuffle(samples)
     x_list = [embeddings[t[0]] for t in samples]
     x_matrix = np.stack(x_list)
@@ -254,10 +250,12 @@ def multi_label_classification_dw(embedding_filename, sample_filename, test_perc
         if verbose:
             print('Training classifier with percentage %.2f' % percentage)
         for ite in range(n_shuffle):
+            if verbose:
+                print('Training for iteration %d/%d' % (ite + 1, n_shuffle))
             x_train, x_test, y_train, y_test = train_test_split(
                 x_matrix, y_matrix,
                 test_size=percentage)
-            model = OneVsRestClassifier(SVC())
+            model = OneVsRestClassifier(LinearSVC())
             model.fit(x_train, y_train)
             pred = model.predict(x_test)
 
