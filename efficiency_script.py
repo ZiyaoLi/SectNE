@@ -4,6 +4,7 @@ from train import Optimizer, BranchOptimizer
 from group import Louvain, groups2inv_index, pure_override_nodes
 import time
 from multiprocessing import Pool
+import numpy as np
 
 ###################
 K_SIZE = 200
@@ -89,4 +90,13 @@ if __name__ == '__main__':
     if OUTPUT_VECTORS:
         f = open(DATADIR + DATASET + '\\' + FILE_NAME, 'w')
         f.write('%d %d %d\n' % (net.nVertices, net.nEdges, DIMENSION))
+        for i, group in enumerate(groups):
+            embeddings = grouped_embeddings[i][1]
+            for j, newVid in enumerate(group):
+                vid = net.newVid2vid_mapping[newVid]
+                f.write('%d ' % vid)
+                vec = np.array(embeddings[:, j].T)
+                vec_str = ' '.join([str(t) for t in vec[:, 0]])
+                f.write(vec_str)
+                f.write('\n')
         f.close()
