@@ -13,7 +13,7 @@ LAMBDA = 10
 ETA = 0.1
 MAX_ITER = 5
 ###################
-OUTPUT_VECTORS = False
+OUTPUT_VECTORS = True
 MERGE = (0, 8000)
 SAMPLE_METHOD = 'set_cover_undir'
 RANDOM_GROUPING = True
@@ -31,7 +31,8 @@ FILE_NAME = '_'.join([
     'sample=%s' % SAMPLE_METHOD,
     'lambda=%.2f' % LAMBDA,
     'eta=%.2f' % ETA,
-    'max-iter=%02d' % MAX_ITER
+    'max-iter=%02d' % MAX_ITER,
+    'paralleled'
 ]) + '.vec'
 
 
@@ -96,7 +97,7 @@ if __name__ == '__main__':
                 vid = net.newVid2vid_mapping[newVid]
                 f.write('%d ' % vid)
                 vec = np.array(embeddings[:, j].T)
-                vec_str = ' '.join([str(t) for t in vec[:, 0]])
+                vec_str = ' '.join([str(t) for t in vec])
                 f.write(vec_str)
                 f.write('\n')
         f.close()
