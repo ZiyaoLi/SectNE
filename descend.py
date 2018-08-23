@@ -114,7 +114,7 @@ def preconditioning_conjugate_gradient(x0, A, b, max_iter=CG_MAX_ITER, eps=CG_EP
 
 
 @jit
-def inverse_descending(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
+def inverse_descending(x, A, b):
     '''
     Implemented from algorithm CG for SPD matrix linear equations,
     from XU, Shufang, et. Numerical Linear Algebra.
@@ -130,6 +130,6 @@ def inverse_descending(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
 
 
 @jit
-def scipy_solve_descending(x, A, b, max_iter=CG_MAX_ITER, eps=CG_EPSILON):
+def scipy_solve_descending(x, A, b):
     return solve(A, b, assume_a='pos'), False
 

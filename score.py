@@ -255,12 +255,17 @@ def multi_label_classification_dw(embedding_filename, sample_filename, test_perc
             x_train, x_test, y_train, y_test = train_test_split(
                 x_matrix, y_matrix,
                 test_size=percentage)
-            model = OneVsRestClassifier(LinearSVC())
+            model = OneVsRestClassifier(LinearSVC(tol=1e-2, max_iter=50, verbose=1))
             model.fit(x_train, y_train)
             pred = model.predict(x_test)
 
-            micro_results[i, ite] = f1_score(y_test, pred, average='micro')
-            macro_results[i, ite] = f1_score(y_test, pred, average='macro')
+            micro = f1_score(y_test, pred, average='micro')
+            macro = f1_score(y_test, pred, average='macro')
+
+            micro_results[i, ite] = micro
+            macro_results[i, ite] = macro
+
+            print('%.4f; %.4f' % (micro, macro))
 
     show_results_shuffle(None, micro_results, macro_results, test_percentage)
 

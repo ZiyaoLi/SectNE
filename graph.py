@@ -61,11 +61,12 @@ class Graph:
 
     def __init__(self, filename, sep='\t', typ='dir',
                  order=ORDER,
-                 verbose=VERBOSE):
+                 verbose=VERBOSE, withdiag=True):
         self.vertices = []
         self.nVertices = 0
         self.nEdges = 0
         self.order = order
+        self.withdiag = withdiag
         f = open(filename, 'r')
         s = f.readline()
         while len(s):
@@ -122,9 +123,10 @@ class Graph:
             vid2colid_map = inverse_index(idx_col, self.nVertices, 'list')
             for row_id, vid in enumerate(idx_row):
                 row = ddict(int)
-                col_id_0 = vid2colid_map[vid]
-                if col_id_0 >= 0:
-                    row[col_id_0] += 1
+                if self.withdiag:
+                    col_id_0 = vid2colid_map[vid]
+                    if col_id_0 >= 0:
+                        row[col_id_0] += 1
                 for first_neighbor in self.fetch_prox(vid, 'out'):
                     col_id_1 = vid2colid_map[first_neighbor]
                     if col_id_1 >= 0:
@@ -147,9 +149,10 @@ class Graph:
             vid2rowid_map = inverse_index(idx_row, self.nVertices, 'list')
             for col_id, vid in enumerate(idx_col):
                 col = ddict(int)
-                row_id_0 = vid2rowid_map[vid]
-                if row_id_0 >= 0:
-                    col[row_id_0] += 1
+                if self.withdiag:
+                    row_id_0 = vid2rowid_map[vid]
+                    if row_id_0 >= 0:
+                        col[row_id_0] += 1
                 for first_neighbor in self.fetch_prox(vid, 'in'):
                     row_id_1 = vid2rowid_map[first_neighbor]
                     if row_id_1 >= 0:

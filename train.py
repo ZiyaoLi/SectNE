@@ -34,11 +34,134 @@ VERBOSE = 1
 DEBUG = False
 
 
+class BranchOptimizer:
+    def __init__(self, optimizer, group_idx, verbose=False):
+        if verbose:
+            print('Start preparation for Group %d...' % group_idx)
+        pt = time.time()
+        self.id = group_idx
+        self.verbose = verbose
+        self.lam = optimizer.lam
+        self.eta = optimizer.eta
+        self.max_iter = optimizer.max_iter
+        self.eps = optimizer.eps
+        self.phi = optimizer.phi
+        self.psi = optimizer.psi
+        if group_idx != 0:
+            landmark_idx = optimizer.groups[0]
+            subset_idx = optimizer.groups[group_idx]
+            full_idx = list(range(optimizer.graph.nVertices))
+
+            self.n_0 = len(landmark_idx)
+            self.n_1 = len(subset_idx)
+            self.m0_tilde = optimizer.m0_tilde
+
+            # 1.MATRIX FETCH
+            m_0_1 = optimizer.graph.calc_matrix_sparse(
+                landmark_idx, subset_idx, style=0)
+            m_1_0 = optimizer.graph.calc_matrix_sparse(
+                subset_idx, landmark_idx, style=1)
+            m_1_1r, m_1_1c = optimizer.graph.calc_matrix_sparse(
+                subset_idx, subset_idx, style=-1)
+            m_1_all = optimizer.graph.calc_matrix_sparse(
+                subset_idx, full_idx, style=0)
+            m_all_1 = optimizer.graph.calc_matrix_sparse(
+                full_idx, subset_idx, style=1)
+            # 2.G_0 & B_0 CALCULATION
+            # G_A = G0_A + G(B), b_A = b0_A + b(B),
+            # where G(B) and b(B) are the B-related additive factors,
+            # vice versa
+            pt = time.time()
+            self.G0_A = optimizer.m0_m0T + \
+                self.lam * (optimizer.m_0_all2 - m_0_1 @ m_0_1.T) + \
+                self.eta * optimizer.eye
+            self.G0_B = optimizer.m0T_m0 + \
+                self.lam * (optimizer.m_all_02 - m_1_0.T @ m_1_0) + \
+                self.eta * optimizer.eye
+            self.b0_A = self.m0_tilde @ m_1_0.T + \
+                self.lam * (optimizer.m_0_all @ m_1_all.T -
+                            optimizer.m_0_0r @ m_1_0.T -
+                            m_0_1 @ m_1_1r.T)
+            self.b0_B = self.m0_tilde.T @ m_0_1 + \
+                self.lam * (optimizer.m_all_0.T @ m_all_1 -
+                            optimizer.m_0_0c.T @ m_0_1 -
+                            m_1_0.T @ m_1_1c)
+            self.m_1_1r = m_1_1r
+            self.m_1_1c = m_1_1c
+
+        if self.verbose:
+            print('Finish preparation for Group %d. Time: %.2f'
+                  % (self.id, time.time() - pt))
+
+    def train(self):
+        if self.id != 0:
+
+            pt = time.time()
+
+            # init: zero initial values
+            A_prev = np.matrix(np.zeros((self.n_0, self.n_1)), copy=False)
+            B_prev = np.matrix(np.zeros((self.n_0, self.n_1)), copy=False)
+            ite = 0
+            # altered = np.inf  # so that initial 'altered' doesn't stop the loop
+            # hist_altered = [np.inf] * N_HISTORY_MONITOR
+
+            # ###### ITERATION ######
+            sum_descend_time = 0
+            t = np.matrix(np.zeros_like(A_prev), copy=False)
+            G = np.matrix(np.zeros_like(self.G0_A), copy=False)
+            b = np.matrix(np.zeros_like(self.b0_A), copy=False)
+            while ite < self.max_iter:  # and altered > self.eps:
+                ite += 1
+                # fixing B updating A
+                t = np.dot(self.m0_tilde, B_prev, out=t)
+                G = np.add(self.G0_A, t @ t.T, out=G)
+                b = np.add(self.b0_A, t @ self.m_1_1r.T, out=b)
+                ptt = time.time()
+                A, state_A = scipy_solve_descending(A_prev, G, b)
+                sum_descend_time += (time.time() - ptt)
+                # fixing A updating B
+                t = np.dot(self.m0_tilde.T, A_prev, out=t)
+                G = np.add(self.G0_B, t @ t.T, out=G)
+                b = np.add(self.b0_B, t @ self.m_1_1c, out=b)
+                ptt = time.time()
+                B, state_B = scipy_solve_descending(B_prev, G, b)
+                sum_descend_time += (time.time() - ptt)
+                # altered = (norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf))  # / A.shape[1]
+                # hist_altered = hist_altered[1:] + [altered]
+                # if altered != 0 and \
+                #     (np.mean(hist_altered) - altered) / altered < THRESHOLD_MONITOR:
+                #     A = A * PERCENTAGE_AVG + A_prev * (1 - PERCENTAGE_AVG)
+                #     B = B * PERCENTAGE_AVG + B_prev * (1 - PERCENTAGE_AVG)
+                A_prev = np.matrix(A, copy=False)
+                B_prev = np.matrix(B, copy=False)
+                # if (state_A or state_B) and (verbose == 2):
+                #     res_mean = (np.mean(res_A) * state_A + np.mean(res_B) * state_B) / (state_A + state_B)
+                #     print("Warning: CG doesn't converge at iter %d, group %d. percentage of residuals: %.4f"
+                #           % (ite, group_idx, res_mean))
+            # To avoid the error of providing max_iter as 0
+            A = A_prev
+            B = B_prev
+
+            # if ite == self.max_iter and self.verbose:
+            #     print("Warning: optimization doesn't converge for group %d, residuals %.4f" % (group_idx, altered))
+
+            if self.verbose:
+                print('Finish training for Group %d. Time: %.2f;\t' 
+                      'Descending Time: %.2f'
+                      % (self.id, time.time() - pt, sum_descend_time))
+
+            w = self.phi @ A
+            c = self.psi @ B
+        else:
+            w = self.phi
+            c = self.psi
+        return self.id, w, c
+
+
 class Optimizer:
     def __init__(self, graph, groups, dim=DIMENSION,
                  lam=LAMBDA, eta=ETA,
                  max_iter=MAX_ITER, epsilon=EPSILON,
-                 cg_max_iter=CG_MAX_ITER, cg_eps=CG_EPSILON,
                  descending_method=DESCENDING_METHOD,
                  verbose=VERBOSE,
                  grouping_strategy='Louvain',
@@ -50,7 +173,6 @@ class Optimizer:
         self.groups = groups
         self.lam, self.eta = lam, eta
         self.max_iter, self.eps = max_iter, epsilon
-        self.cg_max_iter, self.cg_eps = cg_max_iter, cg_eps
         self.descending_method = descending_method
         self.inverse_index = None
         self.trained_embeddings = {}
@@ -164,7 +286,7 @@ class Optimizer:
             G = np.add(G0_A, t @ t.T, out=G)
             b = np.add(b0_A, t @ m_1_1r.T, out=b)
             ptt = time.time()
-            A, state_A = self.descending_method(A_prev, G, b, self.cg_max_iter, self.cg_eps)
+            A, state_A = self.descending_method(A_prev, G, b)
             sum_descend += (time.time() - ptt)
 
             # fixing A updating B
@@ -172,10 +294,10 @@ class Optimizer:
             G = np.add(G0_B, t @ t.T, out=G)
             b = np.add(b0_B, t @ m_1_1c, out=b)
             ptt = time.time()
-            B, state_B = self.descending_method(B_prev, G, b, self.cg_max_iter, self.cg_eps)
+            B, state_B = self.descending_method(B_prev, G, b)
             sum_descend += (time.time() - ptt)
 
-            altered = (norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf)) / A.shape[1]
+            altered = (norm(A - A_prev, np.inf) + norm(B - B_prev, np.inf))  # / A.shape[1]
             hist_altered = hist_altered[1:] + [altered]
             if altered != 0 and \
                     (np.mean(hist_altered) - altered) / altered < THRESHOLD_MONITOR:

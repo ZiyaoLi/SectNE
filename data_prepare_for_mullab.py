@@ -35,7 +35,7 @@ for t, g in samples:
     try:
         lid = mapping[g]
         labels[t][lid] = 1
-    except KeyError:
+    except:
         pass
 
 out = open(dr + dset + 'samples.txt', 'w')
