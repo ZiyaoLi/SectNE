@@ -1,7 +1,7 @@
 import numpy as np
 from collections import defaultdict as ddict
 from scipy import sparse as sp
-from numba import jit
+import time
 
 LAMBDA = 1
 ORDER = 2
@@ -62,6 +62,7 @@ class Graph:
     def __init__(self, filename, sep='\t', typ='dir',
                  order=ORDER,
                  verbose=VERBOSE, withdiag=True):
+        pt = time.time()
         self.vertices = []
         self.nVertices = 0
         self.nEdges = 0
@@ -84,6 +85,7 @@ class Graph:
         self.vid2newVid_mapping = {}
         self.newVid2vid_mapping = {}
         if verbose:
+            print('ACTUAL READING TIME: %.2f' % (time.time() - pt))
             print('Reducing empty vertices...')
         self._reduce(verbose)
 
@@ -251,7 +253,6 @@ class Graph:
 
 
 if __name__ == '__main__':
-    import time
     pt = time.time()
     graph = Graph('data\\flickr\\links.txt')
     print('READ TIME: %.2f' % (time.time() - pt))

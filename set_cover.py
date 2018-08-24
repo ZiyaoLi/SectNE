@@ -1,6 +1,6 @@
 import heapq as hq
 
-VERBOSE = True
+VERBOSE = False
 
 
 def set_cover(net, max_n, typ='dir', verbose=VERBOSE):

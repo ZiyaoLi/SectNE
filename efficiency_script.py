@@ -22,7 +22,7 @@ WITHDIAG = False
 VERBOSE = True
 WORKERS = 2
 ###################
-DATASET = 'wiki'
+DATASET = 'flickr'
 DATADIR = 'data\\'
 FILE_NAME = '_'.join([
     DATASET,
@@ -40,64 +40,74 @@ def WrapTrain(arg):
     return arg.train()
 
 if __name__ == '__main__':
-    pt = time.time()
-    net = Graph(DATADIR + DATASET + '\\links.txt', typ='dir', order=ORDER,
-                withdiag=WITHDIAG, verbose=VERBOSE)
+    record = open('efficiency.log', 'w')
+    for gen_i in range(15, 26):
 
-    read_time = time.time() - pt
-    print('READ TIME: %.2f' % read_time)
+        record.write('nodes=2^%d' % gen_i)
 
-    pt = time.time()
-    grouping_model = Louvain(net, rand=RANDOM_GROUPING, verbose=VERBOSE)
-    groups = grouping_model.execute(merge=MERGE)
-    group_time = time.time() - pt
-    print('GROUP TIME: %.2f' % group_time)
+        filename = DATADIR + DATASET + '\\wiki-gen-%d.txt' % gen_i
 
-    inv_index_original = groups2inv_index(groups, net.nVertices)
+        pt = time.time()
+        net = Graph(filename, typ='dir', order=ORDER,
+                    withdiag=WITHDIAG, verbose=VERBOSE)
 
-    pt = time.time()
-    k_set = sample(net, k=K_SIZE, method=SAMPLE_METHOD)
-    sample_time = time.time() - pt
-    print('SAMPLE TIME: %.2f' % sample_time)
+        read_time = time.time() - pt
+        print('READ TIME: %.2f' % read_time)
 
-    inv_index = groups2inv_index(groups, net.nVertices, k_set)
-    pure_override_nodes(groups, inv_index)
-    groups = [k_set] + groups
+        pt = time.time()
+        grouping_model = Louvain(net, rand=RANDOM_GROUPING, verbose=VERBOSE)
+        groups = grouping_model.execute(merge=MERGE)
+        group_time = time.time() - pt
+        print('GROUP TIME: %.2f' % group_time)
 
-    pt = time.time()
-    optimizer = Optimizer(net, groups, dim=DIMENSION, lam=LAMBDA, eta=ETA,
-                          max_iter=MAX_ITER, sample_strategy=SAMPLE_METHOD,
-                          verbose=VERBOSE)
-    svd_time = time.time() - pt
-    print('INITIAL OPTIMIZER TIME (SVD): %.2f' % svd_time)
+        inv_index_original = groups2inv_index(groups, net.nVertices)
 
-    pt = time.time()
-    branches = []
-    for t in range(len(groups)):
-        branches.append(BranchOptimizer(optimizer, t, verbose=VERBOSE))
-    prep_time = time.time() - pt
-    print('PROCESS PREPARATION TIME: %.2f' % prep_time)
+        pt = time.time()
+        k_set = sample(net, k=K_SIZE, method=SAMPLE_METHOD)
+        sample_time = time.time() - pt
+        print('SAMPLE TIME: %.2f' % sample_time)
 
-    pt = time.time()
-    with Pool(processes=WORKERS) as pool:
-        grouped_embeddings = pool.map(WrapTrain, branches)
-    embed_time = time.time() - pt
-    print('OPTIMIZING TIME: %.2f' % embed_time)
+        inv_index = groups2inv_index(groups, net.nVertices, k_set)
+        pure_override_nodes(groups, inv_index)
+        groups = [k_set] + groups
 
-    total_time = read_time + group_time + sample_time + \
-        svd_time + prep_time + embed_time
-    print('TOTAL TIME: %.2f' % total_time)
+        pt = time.time()
+        optimizer = Optimizer(net, groups, dim=DIMENSION, lam=LAMBDA, eta=ETA,
+                              max_iter=MAX_ITER, sample_strategy=SAMPLE_METHOD,
+                              verbose=VERBOSE)
+        svd_time = time.time() - pt
+        print('INITIAL OPTIMIZER TIME (SVD): %.2f' % svd_time)
 
-    if OUTPUT_VECTORS:
-        f = open(DATADIR + DATASET + '\\' + FILE_NAME, 'w')
-        f.write('%d %d %d\n' % (net.nVertices, net.nEdges, DIMENSION))
-        for i, group in enumerate(groups):
-            embeddings = grouped_embeddings[i][1]
-            for j, newVid in enumerate(group):
-                vid = net.newVid2vid_mapping[newVid]
-                f.write('%d ' % vid)
-                vec = np.array(embeddings[:, j])
-                vec_str = ' '.join([str(t) for t in vec[:, 0]])
-                f.write(vec_str)
-                f.write('\n')
-        f.close()
+        pt = time.time()
+        branches = []
+        for t in range(len(groups)):
+            branches.append(BranchOptimizer(optimizer, t, verbose=VERBOSE))
+        prep_time = time.time() - pt
+        print('PROCESS PREPARATION TIME: %.2f' % prep_time)
+
+        pt = time.time()
+        with Pool(processes=WORKERS) as pool:
+            grouped_embeddings = pool.map(WrapTrain, branches)
+        embed_time = time.time() - pt
+        print('OPTIMIZING TIME: %.2f' % embed_time)
+
+        total_time = read_time + group_time + sample_time + \
+            svd_time + prep_time + embed_time
+        print('TOTAL TIME: %.2f' % total_time)
+
+        record.write('\ttotal time: %.2f\n' % total_time)
+
+        if OUTPUT_VECTORS:
+            f = open(DATADIR + DATASET + '\\' + FILE_NAME, 'w')
+            f.write('%d %d %d\n' % (net.nVertices, net.nEdges, DIMENSION))
+            for i, group in enumerate(groups):
+                embeddings = grouped_embeddings[i][1]
+                for j, newVid in enumerate(group):
+                    vid = net.newVid2vid_mapping[newVid]
+                    f.write('%d ' % vid)
+                    vec = np.array(embeddings[:, j])
+                    vec_str = ' '.join([str(t) for t in vec[:, 0]])
+                    f.write(vec_str)
+                    f.write('\n')
+            f.close()
+    record.close()
