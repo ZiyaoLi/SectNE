@@ -70,6 +70,9 @@ class Graph:
         f = open(filename, 'r')
         s = f.readline()
         while len(s):
+            if s[0] == '#':
+                s = f.readline()
+                continue
             pair = s.strip().split(sep)
             vid_in = int(pair[0])
             vid_out = int(pair[1])
