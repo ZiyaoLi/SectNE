@@ -114,7 +114,7 @@ def process(args):
                                          svd_time + prep_time + embed_time
                             print('TOTAL TIME:\t%.2f' % total_time)
 
-                        if len(args.output) > 1:
+                        if args.output is not None:
                             filename = args.output + '_' + '_'.join(
                                 ['ksize=%d' % ksize,
                                  'dim=%d' % dim,
@@ -169,7 +169,7 @@ def main():
     parser.add_argument('--input', required=True,
                         help='Input edge-list file.')
 
-    parser.add_argument('--output', required=True,
+    parser.add_argument('--output', default=None,
                         help='Output representation file.')
 
     parser.add_argument('--lam', default=1.0, type=float,
