@@ -54,7 +54,7 @@ def process(args):
 
     pt = time.time()
     grouping_model = Louvain(net, rand=True, verbose=(args.v > 1))
-    groups_original = grouping_model.execute(merge=(args.merge0, args.merge1))
+    groups = grouping_model.execute(merge=(args.merge0, args.merge1))
     group_time = time.time() - pt
     if args.v:
         print('GROUP TIME:\t%.2f' % group_time)
@@ -69,96 +69,63 @@ def process(args):
     elif args.sample == 4:
         SAMPLE_METHOD = 'uniform'
 
-    for ksize in args.listksize:
+    pt = time.time()
+    k_set = sample(net, k=args.ksize, method=SAMPLE_METHOD)
+    sample_time = time.time() - pt
+    if args.v:
+        print('SAMPLE TIME:\t%.2f' % sample_time)
 
-        groups = groups_original.copy()
+    inv_index = groups2inv_index(groups, net.nVertices, k_set)
+    pure_override_nodes(groups, inv_index)
+    groups = [k_set] + groups
 
-        pt = time.time()
-        k_set = sample(net, k=ksize, method=SAMPLE_METHOD)
-        sample_time = time.time() - pt
-        if args.v:
-            print('SAMPLE TIME:\t%.2f' % sample_time)
+    pt = time.time()
+    optimizer = Optimizer(net, groups, dim=args.dim, lam=args.lam, eta=args.eta,
+                          max_iter=args.iter, sample_strategy=SAMPLE_METHOD,
+                          verbose=(args.v > 1))
+    svd_time = time.time() - pt
+    if args.v:
+        print('INITIAL OPTIMIZER TIME (SVD):\t%.2f' % svd_time)
 
-        inv_index = groups2inv_index(groups, net.nVertices, k_set)
-        pure_override_nodes(groups, inv_index)
-        groups = [k_set] + groups
+    pt = time.time()
+    branches = []
+    for t in range(len(groups)):
+        branches.append(BranchOptimizer(optimizer, t, verbose=(args.v > 1)))
+    prep_time = time.time() - pt
+    if args.v:
+        print('PROCESS PREPARATION TIME:\t%.2f' % prep_time)
 
-        for dim in args.listdim:
-            for lam in args.listlam:
-                for eta in args.listeta:
-                    for n_iter in args.listiter:
-                        pt = time.time()
-                        optimizer = Optimizer(net, groups, dim=dim, lam=lam, eta=eta,
-                                              max_iter=n_iter, sample_strategy=SAMPLE_METHOD,
-                                              verbose=(args.v > 1))
-                        svd_time = time.time() - pt
-                        if args.v:
-                            print('INITIAL OPTIMIZER TIME (SVD):\t%.2f' % svd_time)
+    pt = time.time()
+    with Pool(processes=args.workers) as pool:
+        grouped_embeddings = pool.map(WrapTrain, branches)
+    embed_time = time.time() - pt
+    print('OPTIMIZING TIME:\t%.2f' % embed_time)
 
-                        pt = time.time()
-                        branches = []
-                        for t in range(len(groups)):
-                            branches.append(BranchOptimizer(optimizer, t, verbose=(args.v > 1)))
-                        prep_time = time.time() - pt
-                        if args.v:
-                            print('PROCESS PREPARATION TIME:\t%.2f' % prep_time)
+    if args.v:
+        total_time = read_time + group_time + sample_time + \
+                     svd_time + prep_time + embed_time
+        print('TOTAL TIME:\t%.2f' % total_time)
 
-                        pt = time.time()
-                        with Pool(processes=args.workers) as pool:
-                            grouped_embeddings = pool.map(WrapTrain, branches)
-                        embed_time = time.time() - pt
-                        print('OPTIMIZING TIME:\t%.2f' % embed_time)
-
-                        if args.v:
-                            total_time = read_time + group_time + sample_time + \
-                                         svd_time + prep_time + embed_time
-                            print('TOTAL TIME:\t%.2f' % total_time)
-
-                        if args.output is not None:
-                            filename = args.output + '_' + '_'.join(
-                                ['ksize=%d' % ksize,
-                                 'dim=%d' % dim,
-                                 'lam=%.1f' % lam,
-                                 'eta=%.1f' % eta,
-                                 'iter=%d' % n_iter
-                                ])
-                            f = open(filename, 'w')
-                            f.write('|V|=%d; |E|=%d; dim=%d\n' % (net.nVertices, net.nEdges, args.dim))
-                            for i, group in enumerate(groups):
-                                embeddings = grouped_embeddings[i][1]
-                                for j, newVid in enumerate(group):
-                                    vid = net.newVid2vid_mapping[newVid]
-                                    f.write('%d ' % vid)
-                                    vec = np.array(embeddings[:, j])
-                                    vec_str = ' '.join([str(t) for t in vec[:, 0]])
-                                    f.write(vec_str)
-                                    f.write('\n')
-                            f.close()
-
-
-def list_handle(args):
-    if args.listlam is not None:
-        args.listlam = eval(args.listlam)
-    else:
-        args.listlam = (args.lam,)
-    if args.listeta is not None:
-        args.listeta = eval(args.listeta)
-    else:
-        args.listeta = (args.eta,)
-    if args.listksize is not None:
-        args.listksize = eval(args.listksize)
-    else:
-        args.listksize = (args.ksize,)
-    if args.listdim is not None:
-        args.listdim = eval(args.listdim)
-    else:
-        args.listdim = (args.dim,)
-    if args.listiter is not None:
-        args.listiter = eval(args.listiter)
-    else:
-        args.listiter = (args.iter,)
-
-    process(args)
+    if args.output is not None:
+        filename = args.output + '_' + '_'.join(
+            ['ksize=%d' % args.ksize,
+             'dim=%d' % args.dim,
+             'lam=%.1f' % args.lam,
+             'eta=%.1f' % args.eta,
+             'iter=%d' % args.iter
+            ])
+        f = open(filename, 'w')
+        f.write('|V|=%d; |E|=%d; dim=%d\n' % (net.nVertices, net.nEdges, args.dim))
+        for i, group in enumerate(groups):
+            embeddings = grouped_embeddings[i][1]
+            for j, newVid in enumerate(group):
+                vid = net.newVid2vid_mapping[newVid]
+                f.write('%d ' % vid)
+                vec = np.array(embeddings[:, j])
+                vec_str = ' '.join([str(t) for t in vec[:, 0]])
+                f.write(vec_str)
+                f.write('\n')
+        f.close()
 
 
 def main():
@@ -208,29 +175,9 @@ def main():
     parser.add_argument('--v', default=1, type=int,
                         help='Verbose level. 0-None; 1-Limited; 2-Plenty.')
 
-    parser.add_argument('--listlam', default=None,
-                        help='Input a list of lambdas to see '
-                             'parameter sensitivity')
-
-    parser.add_argument('--listeta', default=None,
-                        help='Input a list of etas to see '
-                             'parameter sensitivity')
-
-    parser.add_argument('--listksize', default=None,
-                        help='Input a list of ksizes to see '
-                             'parameter sensitivity')
-
-    parser.add_argument('--listdim', default=None,
-                        help='Input a list of lambdas to see '
-                             'parameter sensitivity')
-
-    parser.add_argument('--listiter', default=None,
-                        help='Input a list of iters to see '
-                             'parameter sensitivity')
-
     args = parser.parse_args()
 
-    list_handle(args)
+    process(args)
 
 if __name__ == '__main__':
     sys.exit(main())
