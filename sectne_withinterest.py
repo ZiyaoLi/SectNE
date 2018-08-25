@@ -59,6 +59,21 @@ def process(args):
     if args.v:
         print('GROUP TIME:\t%.2f' % group_time)
 
+    if args.interest is not None:
+        f_int = open(args.interest, 'r')
+        s_int = f_int.read().strip().split()
+        int_set = [int(t) for t in s_int]
+        inv_index = groups2inv_index(groups_original, net.nVertices)
+        interested_groupid = set()
+        for vid in int_set:
+            if isinstance(net.vid2newVid_mapping[vid], int):
+                interested_groupid.add(inv_index[net.vid2newVid_mapping[vid]] - 1)
+        groups_interseted = []
+        for groupid in interested_groupid:
+            groups_interseted.append(groups_original[groupid])
+        groups_original = groups_interseted
+
+
     SAMPLE_METHOD = 'set_cover_undir'
     if args.sample == 1:
         SAMPLE_METHOD = 'deg_deter'
@@ -87,7 +102,7 @@ def process(args):
                     for n_iter in args.listiter:
                         pt = time.time()
                         optimizer = Optimizer(net, groups, dim=dim, lam=lam, eta=eta,
-                                              max_iter=n_iter, sample_strategy=SAMPLE_METHOD,
+                                              max_iter=iter, sample_strategy=SAMPLE_METHOD,
                                               verbose=(args.v > 1))
                         svd_time = time.time() - pt
                         if args.v:
@@ -118,7 +133,7 @@ def process(args):
                                  'dim=%d' % dim,
                                  'lam=%.1f' % lam,
                                  'eta=%.1f' % eta,
-                                 'iter=%d' % n_iter
+                                 'iter=%d' % iter
                                 ])
                             f = open(filename, 'w')
                             f.write('|V|=%d; |E|=%d; dim=%d\n' % (net.nVertices, net.nEdges, args.dim))
@@ -160,7 +175,7 @@ def list_handle(args):
 
 
 def main():
-    parser = ArgumentParser(prog="SectNE",
+    parser = ArgumentParser(prog="SectNE: Sectionalized Network Embedding",
                             formatter_class=ArgumentDefaultsHelpFormatter,
                             conflict_handler='resolve')
 
@@ -205,6 +220,9 @@ def main():
 
     parser.add_argument('--v', default=1, type=int,
                         help='Verbose level. 0-None; 1-Limited; 2-Plenty.')
+
+    parser.add_argument('--interest', default=None,
+                        help='Input file of nodes-of-interest.')
 
     parser.add_argument('--listlam', default=None,
                         help='Input a list of lambdas to see '
