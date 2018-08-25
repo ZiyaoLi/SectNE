@@ -65,6 +65,8 @@ def process(args):
     elif args.sample == 2:
         SAMPLE_METHOD = 'deg_prob'
     elif args.sample == 3:
+        SAMPLE_METHOD = 'deg^2_prob'
+    elif args.sample == 4:
         SAMPLE_METHOD = 'uniform'
 
     for ksize in args.listksize:
@@ -195,10 +197,10 @@ def main():
 
     parser.add_argument('--order', default=1, type=int,
                         help='Order of the proximity matrix. '
-                             '0-I + A; 1-A + A * A')
+                             '0-(I+A); 1-(A+A*A)')
 
     parser.add_argument('--sample-method', dest='sample', default=0, type=int,
-                        help='Sample method: 0-GDS; 1-DD; 2-DP; 3-UF.')
+                        help='Sample method: 0-GDS; 1-DD; 2-DP; 3-SDP; 4-UF.')
 
     parser.add_argument('--workers', default=os.cpu_count(), type=int,
                         help='Number of processes to run.')
